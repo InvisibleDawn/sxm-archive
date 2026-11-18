@@ -1,0 +1,64 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "SXM Archive",
+  "mainBinaryName": "sxm-archive",
+  "version": "2.1.0",
+  "identifier": "com.sxm.archive",
+  "build": {
+    "frontendDist": "../ui"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "SXM Archive",
+        "width": 1280,
+        "height": 840,
+        "minWidth": 980,
+        "minHeight": 640,
+        "dragDropEnabled": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "category": "Utility",
+    "shortDescription": "Ouvrir, extraire et créer des archives",
+    "longDescription": "SXM Archive : gestionnaire d'archives RAR, ZIP, 7z et tar.gz avec chiffrement AES-256, moteur 7-Zip intégré.",
+    "copyright": "© 2026 Laurent Honoré",
+    "publisher": "Laurent Honoré",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico",
+      "icons/icon.png"
+    ],
+    "fileAssociations": [
+      { "ext": ["zip"], "name": "Archive ZIP", "description": "Archive ZIP", "role": "Editor" },
+      { "ext": ["7z"], "name": "Archive 7z", "description": "Archive 7z", "role": "Editor" },
+      { "ext": ["rar"], "name": "Archive RAR", "description": "Archive RAR", "role": "Viewer" },
+      { "ext": ["tgz", "gz"], "name": "Archive tar.gz", "description": "Archive tar.gz", "role": "Editor" }
+    ],
+    "resources": {
+      "bin/": "bin/"
+    },
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "languages": ["French"],
+        "installerHooks": "windows/hooks.nsh"
+      },
+      "wix": {
+        "language": "fr-FR"
+      }
+    }
+  }
+}

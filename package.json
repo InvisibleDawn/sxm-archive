@@ -1,0 +1,16 @@
+{
+  "name": "sxm-archive",
+  "version": "2.1.0",
+  "private": true,
+  "description": "SXM Archive — gestionnaire d'archives RAR, ZIP, 7z, tar.gz",
+  "author": "Laurent Honoré",
+  "license": "MIT",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0"
+  }
+}

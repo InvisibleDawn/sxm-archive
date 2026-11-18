@@ -1,0 +1,74 @@
+# Compile SXM Archive pour Windows sur les serveurs de GitHub (vraie machine Windows, pas de Wine).
+# Lancement : à chaque envoi sur main, à chaque tag "v*" (ex. v2.1.0 → page Releases), ou manuellement (onglet Actions).
+name: Compiler SXM Archive
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: src-tauri }
+
+      # Moteur 7-Zip officiel (github.com/ip7z/7zip) : 7z.exe + 7z.dll embarqués dans l'application.
+      - name: Embarquer 7-Zip
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download 25.01 --repo ip7z/7zip --pattern "7z2501-x64.exe" --dir $env:RUNNER_TEMP --clobber
+          & "C:\Program Files\7-Zip\7z.exe" x "$env:RUNNER_TEMP\7z2501-x64.exe" "-o$env:RUNNER_TEMP\7zx" -y | Out-Null
+          New-Item -ItemType Directory -Force src-tauri/bin | Out-Null
+          Copy-Item "$env:RUNNER_TEMP\7zx\7z.exe","$env:RUNNER_TEMP\7zx\7z.dll","$env:RUNNER_TEMP\7zx\License.txt" src-tauri/bin/
+          & src-tauri/bin/7z.exe i | Select-Object -First 3
+
+      - name: Version (depuis le tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          node -e "const f='src-tauri/tauri.conf.json';const c=require('./'+f);c.version=process.env.GITHUB_REF_NAME.replace(/^v/,'');require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
+
+      - run: npm ci
+      - name: Compiler
+        run: npx tauri build --bundles msi,nsis
+
+      - name: Vérifier l'installation silencieuse
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
+          Start-Process $exe.FullName -ArgumentList "/S" -Wait
+          $dir = "$env:LOCALAPPDATA\SXM Archive"
+          if (!(Test-Path "$dir\sxm-archive.exe")) { throw "sxm-archive.exe non installé" }
+          if (!(Test-Path "$dir\bin\7z.exe")) { throw "7z.exe non installé" }
+          & "$dir\bin\7z.exe" a "$env:RUNNER_TEMP\t.zip" README.md | Out-Null
+          & "$dir\bin\7z.exe" t "$env:RUNNER_TEMP\t.zip"
+          if ($LASTEXITCODE -ne 0) { throw "7-Zip installé ne fonctionne pas" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sxm-archive-windows
+          path: |
+            src-tauri/target/release/bundle/msi/*.msi
+            src-tauri/target/release/bundle/nsis/*.exe
+
+      - name: Publier (page Releases)
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --title "SXM Archive ${GITHUB_REF_NAME#v}" --notes "Installateurs Windows 10/11 (64 bits)." \
+            src-tauri/target/release/bundle/msi/*.msi src-tauri/target/release/bundle/nsis/*.exe

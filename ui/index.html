@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>SXM Archive</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <!-- ============ BARRE LATÉRALE ============ -->
+  <aside class="sidebar">
+    <div class="brand">
+      <img class="brand-logo" src="logo.png" alt="">
+      <div><div class="brand-name">SXM Archive</div><div class="brand-ver" id="ver">v2.0.0</div></div>
+    </div>
+    <nav class="nav">
+      <button class="nav-item active" data-view="home"><span data-i="house"></span>Accueil</button>
+      <button class="nav-item" data-act="open"><span class="c-blue" data-i="folder-open"></span>Ouvrir une archive</button>
+      <button class="nav-item" data-act="compress"><span class="c-teal" data-i="package-plus"></span>Compresser</button>
+      <button class="nav-item" data-act="extract"><span class="c-purple" data-i="folder-output"></span>Extraire</button>
+      <button class="nav-item" data-act="protect"><span class="c-green" data-i="lock"></span>Protéger</button>
+      <button class="nav-item" data-act="test"><span class="c-orange" data-i="shield-check"></span>Tester une archive</button>
+    </nav>
+    <div class="nav-sep"></div>
+    <nav class="nav nav-small">
+      <button class="nav-item" id="themeBtn"><span data-i="sun-moon"></span>Thème clair / sombre</button>
+      <button class="nav-item" id="pinBtn"><span data-i="pin"></span><span id="pinLbl">Épingler l'application</span></button>
+      <button class="nav-item" id="aboutBtn"><span data-i="info"></span>À propos</button>
+    </nav>
+    <div class="side-card">
+      <svg class="side-illu" viewBox="0 0 200 120" aria-hidden="true">
+        <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6efff"/><stop offset="1" stop-color="#cfe0ff"/></linearGradient></defs>
+        <path d="M0 95 Q50 75 100 92 T200 88 V120 H0Z" fill="url(#sg)"/>
+        <g transform="translate(62 18) rotate(-6)">
+          <rect width="70" height="78" rx="8" fill="#fff" stroke="#c9d6f2"/>
+          <rect x="0" y="0" width="70" height="20" rx="8" fill="#2563eb"/>
+          <rect x="0" y="12" width="70" height="8" fill="#2563eb"/>
+          <text x="35" y="14" text-anchor="middle" font-size="10" font-weight="700" fill="#fff" font-family="Segoe UI, sans-serif">ZIP</text>
+          <rect x="31" y="20" width="8" height="6" fill="#f5b400"/><rect x="31" y="30" width="8" height="6" fill="#f5b400"/>
+          <rect x="31" y="40" width="8" height="6" fill="#f5b400"/><rect x="29" y="50" width="12" height="12" rx="2" fill="#e8a400"/>
+          <rect x="10" y="68" width="50" height="3" rx="1.5" fill="#d9e3f7"/>
+        </g>
+        <circle cx="40" cy="30" r="2" fill="#93b4f5"/><circle cx="160" cy="24" r="3" fill="#b9cdf8"/>
+        <path d="M150 50 l3 6 l6 3 l-6 3 l-3 6 l-3 -6 l-6 -3 l6 -3z" fill="#bcd0fb"/>
+      </svg>
+      <p>Vos archives, simplement :<br>compresser, extraire, protéger.<br><b>100 % hors ligne.</b></p>
+    </div>
+  </aside>
+
+  <!-- ============ CONTENU ============ -->
+  <main class="main">
+    <header class="topbar">
+      <div class="top-actions">
+        <button class="icon-btn" title="Nouvelle archive (Ctrl+N)" data-act="compress" data-i="file-plus"></button>
+        <button class="icon-btn" title="Ouvrir (Ctrl+O)" data-act="open" data-i="folder-open"></button>
+        <button class="btn-primary" data-act="extract"><span data-i="folder-output"></span>Extraire</button>
+        <button class="icon-btn" title="Plus" id="moreBtn" data-i="ellipsis"></button>
+      </div>
+    </header>
+
+    <!-- Ruban -->
+    <section class="ribbon">
+      <div class="tabs">
+        <button class="tab active" data-tab="home"><span data-i="house"></span>Accueil</button>
+        <button class="tab" data-tab="archive"><span data-i="package"></span>Archive</button>
+        <button class="tab" data-tab="security"><span data-i="shield-check"></span>Sécurité</button>
+        <button class="tab" data-tab="tools"><span data-i="zap"></span>Outils</button>
+      </div>
+      <div class="tools" id="tools"></div>
+    </section>
+
+    <!-- Vue Accueil -->
+    <section class="panel" id="view-home">
+      <div class="hero">
+        <div class="hero-logo"><img src="logo.png" alt=""></div>
+        <div class="hero-txt">
+          <h1>SXM Archive</h1>
+          <p>Ouvrez, compressez et protégez vos archives.<br>RAR, ZIP, 7z et tar.gz — rapide et 100 % hors ligne.</p>
+        </div>
+        <svg class="hero-scene" viewBox="0 0 560 175" preserveAspectRatio="xMaxYMax slice" aria-hidden="true">
+          <defs>
+            <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe6fb"/><stop offset="1" stop-color="#eaf5fd"/></linearGradient>
+            <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3cc4d8"/><stop offset="1" stop-color="#8fe0e6"/></linearGradient>
+            <linearGradient id="fade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="var(--card)" stop-opacity="1"/><stop offset=".45" stop-color="var(--card)" stop-opacity="0"/></linearGradient>
+            <radialGradient id="sun" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff7c8"/><stop offset="1" stop-color="#fff7c8" stop-opacity="0"/></radialGradient>
+          </defs>
+          <rect width="560" height="175" fill="url(#sky)"/>
+          <circle cx="400" cy="40" r="55" fill="url(#sun)"/>
+          <ellipse cx="190" cy="25" rx="40" ry="8" fill="#fff"/><ellipse cx="215" cy="20" rx="20" ry="8" fill="#fff"/>
+          <ellipse cx="470" cy="30" rx="38" ry="7" fill="#fff" opacity=".9"/>
+          <path d="M230 120 C280 60 330 55 380 80 C420 50 470 45 560 70 V125 H230Z" fill="#7fb38f"/>
+          <path d="M260 125 C320 85 360 90 410 100 C460 80 520 85 560 95 V125Z" fill="#3f8f5a"/>
+          <g fill="#fff"><rect x="420" y="88" width="8" height="7"/><rect x="440" y="84" width="8" height="7"/><rect x="465" y="90" width="8" height="7"/><rect x="490" y="82" width="8" height="7"/><rect x="515" y="88" width="8" height="7"/><rect x="530" y="80" width="8" height="7"/></g>
+          <g><rect x="420" y="86" width="8" height="2" fill="#e05252"/><rect x="465" y="88" width="8" height="2" fill="#2bb3c0"/><rect x="490" y="80" width="8" height="2" fill="#f2b632"/><rect x="530" y="78" width="8" height="2" fill="#e05252"/></g>
+          <rect x="0" y="123" width="560" height="52" fill="url(#sea)"/>
+          <path d="M330 175 C390 150 470 148 560 140 V175Z" fill="#f4e1b5"/>
+          <g stroke="#fff" stroke-width="1.5" opacity=".75"><line x1="250" y1="140" x2="270" y2="140"/><line x1="300" y1="150" x2="330" y2="150"/><line x1="380" y1="135" x2="400" y2="135"/><line x1="220" y1="158" x2="240" y2="158"/></g>
+          <g transform="translate(350 104)"><path d="M0 18 H22 L18 23 H4Z" fill="#fff"/><path d="M11 0 V18 H3Z" fill="#fff"/><path d="M12 3 V17 H20Z" fill="#e9f2fb"/></g>
+          <g stroke="#5b3a1e" stroke-width="3" fill="none"><path d="M520 175 Q515 140 528 110"/><path d="M545 175 Q548 150 540 128"/></g>
+          <g fill="#2f7d45"><path d="M528 110 q-25 -5 -38 10 q18 -8 38 -6z"/><path d="M528 110 q20 -12 32 2 q-16 -6 -32 0z"/><path d="M528 110 q-10 -20 -30 -18 q18 4 30 20z"/><path d="M540 128 q-18 -6 -28 6 q14 -4 28 -4z"/><path d="M540 128 q16 -8 22 4 q-12 -4 -22 -2z"/></g>
+          <rect width="560" height="175" fill="url(#fade)"/>
+        </svg>
+      </div>
+
+      <div class="home-body">
+        <h2 class="section-title"><span class="c-blue" data-i="layout-grid"></span>Que voulez-vous faire ?</h2>
+        <div class="cards">
+          <button class="card selected" data-act="open"><div class="card-ic b-blue" data-i="folder-open"></div><div><h3>Ouvrir une archive</h3><p>Parcourir le contenu d'un RAR, ZIP, 7z ou tar.gz.</p><span class="chip">Ctrl+O</span></div></button>
+          <button class="card" data-act="compress"><div class="card-ic b-teal" data-i="package-plus"></div><div><h3>Créer une archive</h3><p>Compresser fichiers et dossiers en ZIP, 7z ou tar.gz.</p><span class="chip">Ctrl+N</span></div></button>
+          <button class="card" data-act="extract"><div class="card-ic b-purple" data-i="folder-output"></div><div><h3>Extraire</h3><p>Décompresser tout ou partie d'une archive.</p><span class="chip">Ctrl+E</span></div></button>
+          <button class="card" data-act="protect"><div class="card-ic b-green" data-i="lock"></div><div><h3>Protéger par mot de passe</h3><p>Chiffrement AES-256 pour ZIP et 7z.</p><span class="chip">AES-256</span></div></button>
+          <button class="card" data-act="test"><div class="card-ic b-orange" data-i="shield-check"></div><div><h3>Tester une archive</h3><p>Vérifier qu'une archive n'est pas endommagée.</p><span class="chip">Intégrité</span></div></button>
+          <button class="card" data-act="convert"><div class="card-ic b-cyan" data-i="repeat"></div><div><h3>Convertir</h3><p>Transformer un RAR en ZIP ou 7z, et inversement.</p><span class="chip">RAR → ZIP / 7z</span></div></button>
+        </div>
+        <div class="dropzone-wrap">
+          <div class="dropzone" id="dropzone"><span class="c-blue" data-i="upload"></span><div><b>Glissez-déposez vos fichiers ici</b><small>Une archive s'ouvre, des fichiers ou dossiers se compressent.</small></div></div>
+          <button class="btn-big" data-act="open"><span data-i="folder-open"></span>Ouvrir une archive</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vue Archive -->
+    <section class="panel hidden" id="view-archive">
+      <div class="arc-head">
+        <div class="arc-ic" data-i="file-archive"></div>
+        <div class="arc-meta"><div class="arc-name" id="arcName"></div><div class="arc-sub" id="arcSub"></div></div>
+        <div class="arc-search"><span data-i="search"></span><input id="filter" placeholder="Rechercher dans l'archive"></div>
+      </div>
+      <div class="pathbar">
+        <button class="icon-btn sm" id="upBtn" title="Dossier parent (Retour arrière)" data-i="arrow-up"></button>
+        <div class="crumbs" id="crumbs"></div>
+      </div>
+      <div class="table-wrap">
+        <table class="files">
+          <thead><tr><th data-sort="name" class="sorted">Nom</th><th data-sort="size" class="r">Taille</th><th data-sort="packed" class="r">Compressé</th><th data-sort="type">Type</th><th data-sort="date">Modifié</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="empty-dir hidden" id="emptyDir">Ce dossier est vide.</div>
+      </div>
+    </section>
+
+    <footer class="status">
+      <span id="status">SXM Archive</span>
+      <div class="progress hidden" id="progress"><div class="bar" id="bar"></div><span id="pct">0 %</span></div>
+      <span class="engine" id="engine">Moteur 7-Zip</span>
+    </footer>
+  </main>
+</div>
+
+<!-- Modale générique -->
+<div class="overlay hidden" id="overlay"><div class="modal" id="modal"></div></div>
+<div class="toasts" id="toasts"></div>
+<div class="menu hidden" id="menu"></div>
+
+<script src="icons.js"></script>
+<script src="api.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

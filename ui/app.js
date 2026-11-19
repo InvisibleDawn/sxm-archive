@@ -78,9 +78,13 @@ function progress(on, p = 0) {
 }
 api.onProgress(p => progress(true, p));
 async function task(label, fn) {
-  if (busy) return; busy = true; status(label); progress(true, 0);
-  try { return await fn(); } finally { busy = false; progress(false); }
+  if (busy) { toast(ERR.BUSY, false); return null; }
+  busy = true; status(label); progress(true, 0);
+  try { return await fn(); }
+  catch (e) { return { error: 'ENGINE_ERROR', detail: String(e) }; }
+  finally { busy = false; progress(false); }
 }
+$('#cancelBtn').onclick = () => { api.cancel(); status('Annulation…'); };
 function toast(msg, ok = true, link) {
   const el = document.createElement('div');
   el.className = 'toast' + (ok ? '' : ' err');
@@ -118,6 +122,52 @@ function askPassword(name, wrong) {
   });
 }
 
+const ERR = {
+  PASSWORD_REQUIRED: 'Cette archive est protégée : un mot de passe est nécessaire.',
+  PASSWORD_WRONG: 'Mot de passe incorrect.',
+  PASSWORD_UNSUPPORTED: 'Le format tar.gz ne permet pas de mot de passe. Choisissez ZIP ou 7z.',
+  EXISTS: 'Un fichier portant ce nom existe déjà.',
+  DUPLICATE_NAME: 'Deux éléments sélectionnés portent le même nom ; renommez l\'un des deux ou compressez-les séparément',
+  OUTPUT_INSIDE_INPUT: 'L\'archive ne peut pas être enregistrée à l\'intérieur du dossier compressé.',
+  NOT_ARCHIVE: 'Ce fichier n\'est pas une archive reconnue, ou il est endommagé.',
+  CORRUPT: 'L\'archive est endommagée ou incomplète.',
+  UNSUPPORTED: 'Méthode de compression non prise en charge.',
+  DISK_FULL: 'Espace disque insuffisant.',
+  ACCESS_DENIED: 'Accès refusé : vérifiez les droits sur le dossier ou que le fichier n\'est pas ouvert ailleurs.',
+  OUT_OF_MEMORY: 'Mémoire insuffisante pour cette opération.',
+  NOT_FOUND: 'Fichier introuvable',
+  UNSAFE_PATH: 'Chemin dangereux refusé',
+  IS_DIR: 'C\'est un dossier.',
+  EMPTY: 'L\'archive est vide.',
+  SAME_FILE: 'La destination est l\'archive d\'origine.',
+  BUSY: 'Une opération est déjà en cours.',
+  CANCELLED: 'Opération annulée.',
+  ENGINE_MISSING: 'Moteur 7-Zip introuvable : réinstallez SXM Archive.',
+  OPEN_FAILED: 'Impossible d\'ouvrir le fichier',
+  NO_INPUT: 'Aucun fichier sélectionné.',
+};
+function errText(r) {
+  const base = ERR[r.error] || 'Erreur 7-Zip';
+  const withDetail = ['NOT_FOUND', 'UNSAFE_PATH', 'DUPLICATE_NAME', 'OPEN_FAILED', 'ENGINE_ERROR', 'UNSUPPORTED'].includes(r.error) || !ERR[r.error];
+  return withDetail && r.detail ? `${base} : ${r.detail}` : base;
+}
+function showError(r, what) {
+  if (r.error === 'CANCELLED') { status('Opération annulée'); return toast('Opération annulée', false); }
+  status(what);
+  toast(errText(r), false);
+}
+function showWarnings(r) {
+  if (r?.warnings?.length) {
+    alertBox('circle-alert', 'b-orange', 'Terminé avec des avertissements',
+      `<ul style="margin:0;padding-left:18px;max-height:220px;overflow:auto">${r.warnings.map(w => `<li>${esc(w)}</li>`).join('')}</ul>`);
+  }
+}
+function confirmBox(ic, cls, title, body, okLabel = 'Continuer') {
+  return modal(`${head(ic, cls, title)}<div>${body}</div><div class="m-actions"><button class="btn" data-close>Annuler</button><button class="btn primary" id="ok">${okLabel}</button></div>`,
+    (m, close) => { $('#ok', m).onclick = () => close(true); });
+}
+const isPwErr = (r) => r?.error === 'PASSWORD_REQUIRED' || r?.error === 'PASSWORD_WRONG';
+
 function alertBox(ic, cls, title, body) {
   return modal(`${head(ic, cls, title)}<div>${body}</div><div class="m-actions"><button class="btn primary" data-close>OK</button></div>`);
 }
@@ -127,22 +177,35 @@ async function loadArchive(file, password, wrong) {
   if (password === undefined && wrong) return;
   const r = await task('Lecture de l\'archive…', () => api.list(file, password));
   if (!r) return;
-  if (r.error === 'PASSWORD') {
-    const pw = await askPassword(basename(file), password !== undefined);
+  if (isPwErr(r)) {
+    const pw = await askPassword(basename(file), r.error === 'PASSWORD_WRONG');
     if (pw === null) return status('Ouverture annulée');
     return loadArchive(file, pw);
   }
-  if (r.error) { toast('Impossible d\'ouvrir : ' + r.error, false); return status('Échec de l\'ouverture'); }
+  if (r.error) return showError(r, 'Échec de l\'ouverture');
+  if (r.unsafeCount) toast(`Attention : ${r.unsafeCount} élément(s) de cette archive ont un chemin dangereux. Ils seront ramenés dans le dossier de destination à l'extraction.`, false);
   // dossiers implicites
   const seen = new Set(r.entries.map(e => e.path));
   for (const e of [...r.entries]) {
+    if (e.unsafe_path) continue; // affiché tel quel à la racine, sans créer de faux dossiers « .. »
     const parts = e.path.split('/');
     for (let i = 1; i < parts.length; i++) {
       const d = parts.slice(0, i).join('/');
       if (!seen.has(d)) { seen.add(d); r.entries.push({ path: d, size: 0, packed: 0, date: '', dir: true }); }
     }
   }
-  S.arc = { file, entries: r.entries, size: r.archiveSize, password: password || null, encrypted: r.entries.some(e => e.encrypted) || !!password };
+  // tailles des dossiers calculées une seule fois (rapide même avec des centaines de milliers d'éléments)
+  const dirAgg = new Map();
+  for (const e of r.entries) {
+    if (e.dir) continue;
+    let i = e.path.lastIndexOf('/');
+    while (i > 0) {
+      const d = e.path.slice(0, i), g = dirAgg.get(d) || { size: 0, packed: 0 };
+      g.size += e.size; g.packed += e.packed; dirAgg.set(d, g);
+      i = d.lastIndexOf('/');
+    }
+  }
+  S.arc = { file, entries: r.entries, dirAgg, size: r.archiveSize, password: password || null, encrypted: r.entries.some(e => e.encrypted) || !!password };
   S.cwd = ''; S.sel.clear(); S.filter = ''; $('#filter').value = '';
   if (S.tab === 'home') { S.tab = 'archive'; $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'archive')); }
   setView('archive'); renderArchive();
@@ -168,12 +231,9 @@ function renderArchive() {
   const q = S.filter.toLowerCase();
   let rows;
   if (q) rows = a.entries.filter(e => basename(e.path).toLowerCase().includes(q)).map(e => ({ ...e, name: e.path }));
-  else rows = a.entries.filter(e => e.path.startsWith(prefix) && e.path.length > prefix.length && !e.path.slice(prefix.length).includes('/')).map(e => ({ ...e, name: e.path.slice(prefix.length) }));
-  for (const r of rows) if (r.dir) {
-    const sub = r.path + '/';
-    const kids = a.entries.filter(x => !x.dir && x.path.startsWith(sub));
-    r.size = kids.reduce((s, x) => s + x.size, 0); r.packed = kids.reduce((s, x) => s + x.packed, 0);
-  }
+  else rows = a.entries.filter(e => e.unsafe_path ? !prefix : (e.path.startsWith(prefix) && e.path.length > prefix.length && !e.path.slice(prefix.length).includes('/')))
+    .map(e => ({ ...e, name: e.unsafe_path ? e.path : e.path.slice(prefix.length) }));
+  for (const r of rows) if (r.dir) { const g = a.dirAgg.get(r.path); r.size = g?.size || 0; r.packed = g?.packed || 0; }
   const { key, desc } = S.sort;
   rows.sort((x, y) => {
     if (x.dir !== y.dir) return x.dir ? -1 : 1;
@@ -185,7 +245,7 @@ function renderArchive() {
   $('#rows').innerHTML = rows.map(r => {
     const [t, ic, cls] = typeOf(r.name, r.dir);
     return `<tr data-p="${esc(r.path)}" data-dir="${r.dir ? 1 : ''}" class="${S.sel.has(r.path) ? 'sel' : ''}">
-      <td class="name"><span class="${cls}" data-i="${ic}"></span><span>${esc(r.name)}</span>${r.encrypted ? '<span class="lock" data-i="lock"></span>' : ''}</td>
+      <td class="name"><span class="${cls}" data-i="${ic}"></span><span>${esc(r.name)}</span>${r.encrypted ? '<span class="lock" data-i="lock"></span>' : ''}${r.unsafe_path ? '<span class="lock" title="Chemin dangereux neutralisé" data-i="circle-alert"></span>' : ''}</td>
       <td class="r">${r.dir && !r.size ? '' : human(r.size)}</td><td class="r muted">${r.packed ? human(r.packed) : '—'}</td>
       <td class="muted">${t}</td><td class="muted">${esc(fmtDate(r.date))}</td></tr>`;
   }).join('');
@@ -237,11 +297,18 @@ async function needPassword() {
   }
   return true;
 }
-async function viewMember(member) {
+async function viewMember(member, allowDangerous = false) {
   if (!(await needPassword())) return;
-  const r = await task('Ouverture du fichier…', () => api.openMember({ file: S.arc.file, member, password: S.arc.password }));
-  if (r?.error === 'PASSWORD') { S.arc.password = null; toast('Mot de passe incorrect', false); return; }
-  if (r?.error) toast(r.error, false); else status('Ouvert : ' + basename(member));
+  const r = await task('Ouverture du fichier…', () => api.openMember({ file: S.arc.file, member, password: S.arc.password, allowDangerous }));
+  if (!r) return;
+  if (r.error === 'DANGEROUS') {
+    const ok = await confirmBox('circle-alert', 'b-orange', 'Fichier potentiellement dangereux',
+      `<p><b>${esc(basename(member))}</b> est un programme ou un script. Ne l'ouvrez que si vous connaissez sa provenance.</p>`, 'Ouvrir quand même');
+    return ok ? viewMember(member, true) : status('Ouverture annulée');
+  }
+  if (isPwErr(r)) { S.arc.password = null; toast(errText(r), false); return viewMember(member, allowDangerous); }
+  if (r.error) return showError(r, 'Échec de l\'ouverture');
+  status('Ouvert : ' + basename(member));
 }
 
 // ================= compression =================
@@ -290,9 +357,17 @@ async function compressFlow(files, opts = {}) {
   });
   if (!res) return;
   const out = join(dirname(files[0]), res.name + FMT[res.format]);
-  const r = await task(`Création de ${basename(out)}…`, () => api.compress({ files, out, ...res }));
-  if (r?.error) { toast('Échec : ' + r.error, false); return status('Échec de la compression'); }
+  let overwrite = false;
+  if ((await api.stat(out)).exists) {
+    overwrite = await confirmBox('circle-alert', 'b-orange', 'Le fichier existe déjà',
+      `<p><b>${esc(basename(out))}</b> existe déjà dans ce dossier. Voulez-vous le remplacer ?</p>`, 'Remplacer');
+    if (!overwrite) return status('Compression annulée');
+  }
+  const r = await task(`Création de ${basename(out)}…`, () => api.compress({ files, out, ...res, overwrite }));
+  if (!r) return;
+  if (r.error) return showError(r, 'Échec de la compression');
   toast(`Archive créée : ${basename(out)}`, true, { label: 'Afficher', fn: () => api.showInFolder(out) });
+  showWarnings(r);
   await loadArchive(out, res.password || undefined);
 }
 
@@ -302,15 +377,23 @@ async function ensureArchive() {
   const f = await api.pickArchive(); if (!f) return false;
   await loadArchive(f); return !!S.arc;
 }
-async function doExtract(dest) {
+async function doExtract(dest, uniqueDest = false) {
   if (!(await needPassword())) return;
   const members = [...S.sel];
   const r = await task(members.length ? `Extraction de ${members.length} élément(s)…` : 'Extraction…',
-    () => api.extract({ file: S.arc.file, dest, members, password: S.arc.password }));
-  if (r?.error === 'PASSWORD') { S.arc.password = null; toast('Mot de passe incorrect', false); return status('Mot de passe incorrect'); }
-  if (r?.error) { toast('Échec : ' + r.error, false); return status('Échec de l\'extraction'); }
-  status('Extrait dans ' + dest);
-  toast('Extraction terminée', true, { label: 'Ouvrir le dossier', fn: () => api.openPath(dest) });
+    () => api.extract({ file: S.arc.file, dest, members, password: S.arc.password, uniqueDest }));
+  if (!r) return;
+  if (isPwErr(r)) {
+    S.arc.password = null;
+    const pw = await askPassword(basename(S.arc.file), r.error === 'PASSWORD_WRONG');
+    if (pw === null) return status('Extraction annulée');
+    S.arc.password = pw; return doExtract(dest, uniqueDest);
+  }
+  if (r.error) return showError(r, 'Échec de l\'extraction');
+  const where = r.out || dest;
+  status('Extrait dans ' + where);
+  toast('Extraction terminée. Les fichiers déjà présents ont été conservés.', true, { label: 'Ouvrir le dossier', fn: () => api.openPath(where) });
+  showWarnings(r);
 }
 
 const actions = {
@@ -325,15 +408,18 @@ const actions = {
   },
   extractHere: async () => {
     if (!(await ensureArchive())) return;
-    doExtract(join(dirname(S.arc.file), stripExt(basename(S.arc.file))));
+    doExtract(join(dirname(S.arc.file), stripExt(basename(S.arc.file))), true);
   },
   test: async () => {
     if (!(await ensureArchive())) return;
     if (!(await needPassword())) return;
     const r = await task('Test de l\'archive…', () => api.test({ file: S.arc.file, password: S.arc.password }));
-    if (r?.ok) { status('Aucune erreur trouvée'); alertBox('shield-check', 'b-green', 'Test réussi', `<p>Aucune erreur n'a été trouvée dans <b>${esc(basename(S.arc.file))}</b>.</p>`); }
-    else if (r?.error === 'PASSWORD') { S.arc.password = null; toast('Mot de passe incorrect', false); }
-    else if (r) { status('Archive endommagée'); alertBox('circle-alert', 'b-orange', 'Archive endommagée', `<p>${esc(r.error)}</p>`); }
+    if (!r) return;
+    if (r.ok && r.warnings?.length) { status('Test terminé avec des avertissements'); showWarnings(r); }
+    else if (r.ok) { status('Aucune erreur trouvée'); alertBox('shield-check', 'b-green', 'Test réussi', `<p>Aucune erreur n'a été trouvée dans <b>${esc(basename(S.arc.file))}</b>.</p>`); }
+    else if (isPwErr(r)) { S.arc.password = null; toast(errText(r), false); }
+    else if (r.error === 'CANCELLED') showError(r, '');
+    else { status('Archive endommagée'); alertBox('circle-alert', 'b-orange', 'Problème détecté', `<p>${esc(errText(r))}</p>`); }
   },
   info: () => {
     if (!S.arc) return;
@@ -358,26 +444,39 @@ const actions = {
     const res = await modal(`${head('repeat', 'b-cyan', 'Convertir l\'archive', esc(basename(S.arc.file)))}
       <div class="field"><label>Nouveau format</label><div class="seg" id="seg">${Object.keys(FMT).map(f => `<button data-f="${f}" class="${f === fmt ? 'on' : ''}">${f === 'tar.gz' ? 'tar.gz' : f.toUpperCase()}</button>`).join('')}</div></div>
       <div class="field"><label>Niveau de compression</label><select class="input" id="lv">${LEVELS.map(([l, v]) => `<option value="${v}" ${v === 5 ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div id="npBox" class="field"><label>Mot de passe de la nouvelle archive (facultatif)</label><input class="input" type="password" id="np" placeholder="Laisser vide pour ne pas protéger"></div>
+      ${S.arc.encrypted ? '<div class="warn">L\'archive d\'origine est protégée : sans nouveau mot de passe, la nouvelle archive ne le sera pas.</div>' : ''}
       <div class="hint">L'archive d'origine est conservée. La nouvelle est créée dans le même dossier.</div>
       <div class="m-actions"><button class="btn" data-close>Annuler</button><button class="btn primary" id="go">Convertir</button></div>`,
     (m, close) => {
-      $$('#seg button', m).forEach(b => b.onclick = () => { fmt = b.dataset.f; $$('#seg button', m).forEach(x => x.classList.toggle('on', x === b)); });
-      $('#go', m).onclick = () => close({ format: fmt, level: +$('#lv', m).value });
+      const sync = () => $('#npBox', m).classList.toggle('hidden', fmt === 'tar.gz');
+      $$('#seg button', m).forEach(b => b.onclick = () => { fmt = b.dataset.f; $$('#seg button', m).forEach(x => x.classList.toggle('on', x === b)); sync(); });
+      sync();
+      $('#go', m).onclick = () => close({ format: fmt, level: +$('#lv', m).value, newPassword: fmt === 'tar.gz' ? null : ($('#np', m).value || null) });
     });
     if (!res) return;
     const out = join(dirname(S.arc.file), stripExt(basename(S.arc.file)) + FMT[res.format]);
     if (out === S.arc.file) return toast('L\'archive est déjà dans ce format', false);
-    const r = await task(`Conversion vers ${res.format}…`, () => api.convert({ file: S.arc.file, password: S.arc.password, out, ...res }));
-    if (r?.error) { toast('Échec : ' + r.error, false); return status('Échec de la conversion'); }
+    let overwrite = false;
+    if ((await api.stat(out)).exists) {
+      overwrite = await confirmBox('circle-alert', 'b-orange', 'Le fichier existe déjà', `<p><b>${esc(basename(out))}</b> existe déjà. Voulez-vous le remplacer ?</p>`, 'Remplacer');
+      if (!overwrite) return status('Conversion annulée');
+    }
+    const r = await task(`Conversion vers ${res.format}…`, () => api.convert({ file: S.arc.file, password: S.arc.password, out, ...res, overwrite }));
+    if (!r) return;
+    if (isPwErr(r)) { S.arc.password = null; return showError(r, 'Mot de passe incorrect'); }
+    if (r.error) return showError(r, 'Échec de la conversion');
     toast(`Converti : ${basename(out)}`, true, { label: 'Afficher', fn: () => api.showInFolder(out) });
-    loadArchive(out);
+    showWarnings(r);
+    loadArchive(out, res.newPassword || undefined);
   },
   theme: () => setTheme(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'),
   about: async () => {
     const i = await api.appInfo();
     alertBox('archive', 'b-teal', 'SXM Archive', `<p style="margin:0 0 10px">Version ${esc(i.version)} — moteur ${esc(i.engine)}</p>
       <p style="margin:0 0 10px;color:var(--muted)">Gestionnaire d'archives léger : RAR (extraction), ZIP, 7z et tar.gz. Chiffrement AES-256. 100 % hors ligne.</p>
-      <p style="margin:0;color:var(--soft);font-size:12px">Créé par Laurent Honoré. 7-Zip © Igor Pavlov, licence GNU LGPL + restriction unRAR.</p>`);
+      <p style="margin:0 0 6px;color:var(--soft);font-size:12px">Éditeur : ${esc(i.publisher)} · © 2026 ${esc(i.publisher)}</p>
+      <p style="margin:0;color:var(--soft);font-size:12px">Moteur 7-Zip © 1999-2025 Igor Pavlov, licence GNU LGPL avec restriction unRAR (le code de décompression RAR ne peut pas servir à recréer l'algorithme de compression RAR). Texte complet : dossier « bin\\License.txt » de l'installation.</p>`);
   },
 };
 
@@ -433,11 +532,16 @@ async function handleFiles(files) {
   if (!files.length) return;
   if (files.length === 1 && ARC_RE.test(files[0])) {
     const st = await api.stat(files[0]);
-    if (st && !st.dir) return loadArchive(files[0]);
+    if (st?.exists && !st.dir) return loadArchive(files[0]);
   }
   compressFlow(files);
 }
-api.onOpenFiles(handleFiles);
+let pending = [], pendingTimer = null;
+api.onOpenFiles((files) => {
+  pending.push(...files);
+  clearTimeout(pendingTimer);
+  pendingTimer = setTimeout(() => { const f = [...new Set(pending)]; pending = []; handleFiles(f); }, 400);
+});
 
 // ================= démarrage =================
 (async () => {

@@ -125,6 +125,7 @@ function askPassword(name, wrong) {
 const ERR = {
   PASSWORD_REQUIRED: 'Cette archive est protégée : un mot de passe est nécessaire.',
   PASSWORD_WRONG: 'Mot de passe incorrect.',
+  PASSWORD_CHARS: 'Ce mot de passe contient un caractère non pris en charge par 7-Zip sous Windows (guillemet « " »). Choisissez-en un autre.',
   PASSWORD_UNSUPPORTED: 'Le format tar.gz ne permet pas de mot de passe. Choisissez ZIP ou 7z.',
   EXISTS: 'Un fichier portant ce nom existe déjà.',
   DUPLICATE_NAME: 'Deux éléments sélectionnés portent le même nom ; renommez l\'un des deux ou compressez-les séparément',
@@ -352,6 +353,7 @@ async function compressFlow(files, opts = {}) {
       if (!name) return err('Indiquez un nom d\'archive.');
       if (usePw && !p1) return err('Saisissez un mot de passe.');
       if (usePw && p1 !== p2) return err('Les mots de passe ne correspondent pas.');
+      if (usePw && p1.includes('"')) return err('Le guillemet « " » n\'est pas accepté dans un mot de passe (limite de 7-Zip sous Windows).');
       close({ name, format: fmt, level: +$('#lv', m).value, password: usePw ? p1 : null, encryptNames: $('#enc', m).checked });
     };
   });

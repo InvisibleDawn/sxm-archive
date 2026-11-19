@@ -414,6 +414,16 @@ pub fn is_tgz(f: &str) -> bool {
     l.ends_with(".tar.gz") || l.ends_with(".tgz")
 }
 
+/// Sous Windows, 7-Zip découpe lui-même sa ligne de commande et ne sait pas recevoir un guillemet
+/// dans un argument : un mot de passe contenant `"` serait mal transmis. On le refuse clairement.
+pub fn check_password(password: Option<&str>) -> EResult<()> {
+    match password {
+        Some(p) if p.contains('"') && cfg!(windows) => Err(EngineError::new("PASSWORD_CHARS", "\"")),
+        Some(p) if p.contains('\0') || p.contains('\n') || p.contains('\r') => Err(EngineError::new("PASSWORD_CHARS", "")),
+        _ => Ok(()),
+    }
+}
+
 fn pw_arg(password: Option<&str>) -> String {
     match password {
         Some(p) if !p.is_empty() => format!("-p{p}"),
@@ -647,6 +657,7 @@ fn push_entry(cur: &mut HashMap<String, String>, entries: &mut Vec<Entry>) {
 
 impl Engine {
     pub fn list(&self, file: &str, password: Option<&str>) -> EResult<Listing> {
+        check_password(password)?;
         if !Path::new(file).is_file() {
             return Err(EngineError::new("NOT_FOUND", file));
         }
@@ -740,6 +751,7 @@ impl Engine {
     }
 
     pub fn test(&self, file: &str, password: Option<&str>, progress: Option<Progress>) -> EResult<Done> {
+        check_password(password)?;
         let o = if is_tgz(file) {
             self.run_tgz(file, s(&["t", "-bsp1"]), progress, None)?
         } else {
@@ -782,6 +794,7 @@ impl Engine {
         if files.is_empty() {
             return Err(EngineError::new("NO_INPUT", ""));
         }
+        check_password(password)?;
         let mut names = HashSet::new();
         for f in files {
             let p = Path::new(f);
@@ -1202,11 +1215,21 @@ mod tests {
         let inp = [a.display().to_string()];
         // 7z avec noms chiffrés : la liste elle-même exige le mot de passe
         let z7 = w.path.join("secret.7z");
-        e.compress(&inp, z7.to_str().unwrap(), "7z", 5, Some("Mot de passe é\"&"), true, false, None).unwrap();
+        e.compress(&inp, z7.to_str().unwrap(), "7z", 5, Some("Mot de passe é & 'x' %PATH% ^!"), true, false, None).unwrap();
         assert_eq!(e.list(z7.to_str().unwrap(), None).unwrap_err().code, "PASSWORD_REQUIRED");
         assert_eq!(e.list(z7.to_str().unwrap(), Some("faux")).unwrap_err().code, "PASSWORD_WRONG");
-        assert!(!e.list(z7.to_str().unwrap(), Some("Mot de passe é\"&")).unwrap().entries.is_empty());
-        e.test(z7.to_str().unwrap(), Some("Mot de passe é\"&"), None).unwrap();
+        assert!(!e.list(z7.to_str().unwrap(), Some("Mot de passe é & 'x' %PATH% ^!")).unwrap().entries.is_empty());
+        e.test(z7.to_str().unwrap(), Some("Mot de passe é & 'x' %PATH% ^!"), None).unwrap();
+        // guillemet : refusé sous Windows (7-Zip ne peut pas le recevoir), accepté ailleurs
+        let q = w.path.join("guillemet.7z");
+        let r = e.compress(&inp, q.to_str().unwrap(), "7z", 5, Some("a\"b"), false, false, None);
+        if cfg!(windows) {
+            assert_eq!(r.unwrap_err().code, "PASSWORD_CHARS");
+            assert!(!q.exists());
+        } else {
+            r.unwrap();
+            e.test(q.to_str().unwrap(), Some("a\"b"), None).unwrap();
+        }
         // ZIP AES : liste lisible, extraction protégée
         let zp = w.path.join("secret.zip");
         e.compress(&inp, zp.to_str().unwrap(), "zip", 5, Some("abc"), false, false, None).unwrap();

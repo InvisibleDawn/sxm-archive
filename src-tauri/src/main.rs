@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod engine;
+mod update;
 
 use engine::{begin_operation, cleanup_temp, Done, EResult, Engine, EngineError, Listing};
 use serde::{Deserialize, Serialize};
@@ -303,9 +304,12 @@ fn main() {
                 p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("bin").join(exe);
             }
             let _ = ENGINE.set(Engine { seven: p });
+            update::init(app);
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            update::check_update,
+            update::install_update,
             list,
             extract,
             test,

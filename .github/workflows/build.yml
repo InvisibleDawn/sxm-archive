@@ -41,8 +41,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable
         with: { components: "clippy, rustfmt" }
@@ -89,8 +89,8 @@ jobs:
     defaults:
       run: { shell: pwsh }
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
@@ -210,8 +210,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
@@ -273,8 +273,8 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable
         with: { targets: "aarch64-apple-darwin,x86_64-apple-darwin" }
@@ -322,7 +322,7 @@ jobs:
           # le .dmg s'ouvre et contient l'application
           hdiutil attach -nobrowse -mountpoint "$RUNNER_TEMP/dmg" "$B"/dmg/*.dmg >/dev/null
           test -d "$RUNNER_TEMP/dmg/SXM Archive.app" && hdiutil detach "$RUNNER_TEMP/dmg" >/dev/null
-          (cd "$B" && for f in dmg/*.dmg macos/*.app.tar.gz; do [ -f "$f" ] && echo "$(shasum -a 256 "$f" | cut -d' ' -f1)  $(basename "$f")"; done) | tee "$GITHUB_WORKSPACE/SHA256SUMS.txt"
+          (cd "$B" && for f in dmg/*.dmg macos/*.app.tar.gz; do if [ -f "$f" ]; then echo "$(shasum -a 256 "$f" | cut -d' ' -f1)  $(basename "$f")"; fi; done) | tee "$GITHUB_WORKSPACE/SHA256SUMS.txt"
       - uses: actions/upload-artifact@v4
         with:
           name: sxm-archive-macos
@@ -344,7 +344,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Version
         id: v
         run: echo "tag=v$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"

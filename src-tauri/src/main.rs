@@ -2,19 +2,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod engine;
+mod files;
+mod system;
 mod update;
 
 use engine::{begin_operation, cleanup_temp, Done, EResult, Engine, EngineError, Listing};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
-
-#[cfg(windows)]
-use std::os::windows::process::CommandExt;
 
 static ENGINE: OnceLock<Engine> = OnceLock::new();
 /// Une seule opération lourde à la fois.
@@ -184,7 +182,7 @@ struct MemberReq {
 async fn open_member(app: AppHandle, req: MemberReq) -> Res<Done> {
     heavy(app, move |e, _| {
         let p = e.extract_member(&req.file, &req.member, pw(&req.password), req.allow_dangerous)?;
-        open_path_impl(&p).map_err(|x| EngineError::new("OPEN_FAILED", x))?;
+        system::open_file(&p).map_err(|x| EngineError::new("OPEN_FAILED", x))?;
         Ok(Done { ok: true, out: Some(p.display().to_string()), warnings: vec![] })
     })
     .await
@@ -193,49 +191,6 @@ async fn open_member(app: AppHandle, req: MemberReq) -> Res<Done> {
 #[tauri::command]
 fn cancel() {
     engine::cancel();
-}
-
-fn open_path_impl(p: &Path) -> Result<(), String> {
-    if !p.exists() {
-        return Err(format!("introuvable : {}", p.display()));
-    }
-    #[cfg(windows)]
-    let r = Command::new("explorer").arg(p).creation_flags(0x0800_0000).spawn();
-    #[cfg(target_os = "macos")]
-    let r = Command::new("open").arg(p).spawn();
-    #[cfg(all(unix, not(target_os = "macos")))]
-    let r = Command::new("xdg-open").arg(p).spawn();
-    r.map(|_| ()).map_err(|e| e.to_string())
-}
-
-/// Ouvre un dossier (jamais un fichier : l'ouverture de fichiers passe par `open_member`).
-#[tauri::command]
-fn open_path(path: String) -> Result<(), String> {
-    let p = Path::new(&path);
-    if !p.is_dir() {
-        return Err("seuls les dossiers peuvent être ouverts ici".into());
-    }
-    open_path_impl(p)
-}
-
-#[tauri::command]
-fn show_in_folder(path: String) -> Result<(), String> {
-    if !Path::new(&path).exists() {
-        return Err(format!("introuvable : {path}"));
-    }
-    #[cfg(windows)]
-    {
-        Command::new("explorer")
-            .raw_arg(format!("/select,\"{}\"", path.replace('"', "")))
-            .creation_flags(0x0800_0000)
-            .spawn()
-            .map(|_| ())
-            .map_err(|e| e.to_string())
-    }
-    #[cfg(not(windows))]
-    {
-        open_path_impl(Path::new(&path).parent().unwrap_or(Path::new("/")))
-    }
 }
 
 #[derive(Serialize)]
@@ -275,14 +230,15 @@ fn files_from_args(args: &[String]) -> Vec<String> {
     args.iter().skip(1).filter(|a| !a.starts_with('-') && Path::new(a).exists()).cloned().collect()
 }
 
+/// Fichiers passés au lancement (double-clic, clic droit « Compresser avec SXM Archive »).
 #[tauri::command]
-fn start_files() -> Vec<String> {
+fn startup_args() -> Vec<String> {
     files_from_args(&std::env::args().collect::<Vec<_>>())
 }
 
 fn main() {
     // dossiers temporaires de plus de 24 h laissés par une session précédente
-    cleanup_temp(Duration::from_secs(24 * 3600));
+    std::thread::spawn(|| cleanup_temp(Duration::from_secs(24 * 3600)));
 
     tauri::Builder::default()
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
@@ -292,10 +248,11 @@ fn main() {
             }
             let files = files_from_args(&argv);
             if !files.is_empty() {
-                let _ = app.emit("open-files", files);
+                let _ = app.emit("sxm-args", files);
             }
         }))
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let exe = if cfg!(windows) { "7z.exe" } else { "7zz" };
             let mut p = app.path().resource_dir().unwrap_or_default().join("bin").join(exe);
@@ -304,12 +261,11 @@ fn main() {
                 p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("bin").join(exe);
             }
             let _ = ENGINE.set(Engine { seven: p });
-            update::init(app);
+            #[cfg(target_os = "macos")]
+            system::mac_menu(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            update::check_update,
-            update::install_update,
             list,
             extract,
             test,
@@ -317,12 +273,23 @@ fn main() {
             convert,
             open_member,
             cancel,
-            open_path,
-            show_in_folder,
             stat,
             app_info,
-            start_files
+            startup_args,
+            system::open_dir,
+            system::reveal,
+            system::open_external,
+            system::pin_app,
+            update::update_check,
+            update::update_install
         ])
+        .on_menu_event(|app, ev| {
+            if ev.id().as_ref() == "sxm-quit" {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.close();
+                }
+            }
+        })
         .build(tauri::generate_context!())
         .expect("erreur au démarrage de SXM Archive")
         .run(|_app, ev| {

@@ -50,7 +50,8 @@
         ],
         "name": "Archive ZIP",
         "description": "Archive ZIP",
-        "role": "Editor"
+        "role": "Editor",
+        "mimeType": "application/zip"
       },
       {
         "ext": [
@@ -58,7 +59,8 @@
         ],
         "name": "Archive 7z",
         "description": "Archive 7z",
-        "role": "Editor"
+        "role": "Editor",
+        "mimeType": "application/x-7z-compressed"
       },
       {
         "ext": [
@@ -66,16 +68,26 @@
         ],
         "name": "Archive RAR",
         "description": "Archive RAR",
-        "role": "Viewer"
+        "role": "Viewer",
+        "mimeType": "application/vnd.rar"
       },
       {
         "ext": [
-          "tgz",
-          "gz"
+          "tgz"
         ],
         "name": "Archive tar.gz",
         "description": "Archive tar.gz",
-        "role": "Editor"
+        "role": "Editor",
+        "mimeType": "application/x-compressed-tar"
+      },
+      {
+        "ext": [
+          "gz"
+        ],
+        "name": "Archive gzip",
+        "description": "Archive gzip",
+        "role": "Editor",
+        "mimeType": "application/gzip"
       }
     ],
     "resources": {
@@ -92,6 +104,25 @@
       },
       "wix": {
         "language": "fr-FR"
+      }
+    },
+    "linux": {
+      "rpm": {
+        "depends": [
+          "webkit2gtk4.1",
+          "gtk3",
+          "libstdc++"
+        ],
+        "recommends": [
+          "caja-actions"
+        ],
+        "release": "1",
+        "files": {
+          "/usr/share/file-manager/actions/sxm-archive-compress.desktop": "linux/caja-compress.desktop",
+          "/usr/share/nemo/actions/sxm-archive-compress.nemo_action": "linux/nemo-compress.nemo_action",
+          "/usr/share/licenses/sxm-archive/7-Zip-License.txt": "bin/License.txt"
+        },
+        "desktopTemplate": "linux/sxm-archive.desktop"
       }
     }
   }

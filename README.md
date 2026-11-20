@@ -1,9 +1,12 @@
 # SXM Archive
 
-Gestionnaire d'archives pour Windows 10/11 : **RAR** (extraction), **ZIP**, **7z** et **tar.gz** (extraction et création), chiffrement **AES-256**, conversion entre formats, test d'intégrité. Moteur 7-Zip 25.01 intégré, 100 % hors ligne.
+Gestionnaire d'archives pour Windows 10/11 et Fedora : **RAR** (extraction), **ZIP**, **7z** et **tar.gz** (extraction et création), chiffrement **AES-256**, conversion entre formats, test d'intégrité. Moteur 7-Zip 25.01 intégré, 100 % hors ligne.
 
 ## Installer
-Téléchargez le dernier installateur dans l'onglet **Releases** (`.exe` recommandé, ou `.msi`).
+Téléchargez le dernier installateur dans l'onglet **Releases** :
+- **Windows 10/11** : `.exe` (recommandé) ou `.msi` ;
+- **Fedora** : `.rpm`, puis `sudo dnf install ./SXM.Archive-*.x86_64.rpm`. Clic droit « Compresser avec SXM Archive »
+  dans Caja (MATE, paquet `caja-actions`) et Nemo (Cinnamon).
 
 ## Compiler et publier
 Tout se fait sur GitHub Actions (`.github/workflows/build.yml`) :

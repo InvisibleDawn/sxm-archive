@@ -237,7 +237,7 @@ jobs:
             grep -v -i -E "egl|dri3|mesa|libGL" /tmp/app.log | tail -5 || true
             if [ "$rc" -ne 124 ]; then echo "sxm-archive s est arrete (code $rc)"; exit 1; fi
             dnf -y -q remove sxm-archive
-            test ! -e /usr/bin/sxm-archive && test ! -e "/usr/lib/SXM Archive"
+            if [ -e /usr/bin/sxm-archive ] || [ -e "/usr/lib/SXM Archive" ]; then find /usr/bin/sxm-archive "/usr/lib/SXM Archive" 2>/dev/null; echo "fichiers restants apres desinstallation"; exit 1; fi
             echo "Fedora : installation, lancement et desinstallation OK"
           '
       - name: Empreinte

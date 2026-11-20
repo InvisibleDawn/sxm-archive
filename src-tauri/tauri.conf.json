@@ -122,7 +122,8 @@
           "/usr/share/nemo/actions/sxm-archive-compress.nemo_action": "linux/nemo-compress.nemo_action",
           "/usr/share/licenses/sxm-archive/7-Zip-License.txt": "bin/License.txt"
         },
-        "desktopTemplate": "linux/sxm-archive.desktop"
+        "desktopTemplate": "linux/sxm-archive.desktop",
+        "postRemoveScript": "linux/postun.sh"
       }
     }
   }

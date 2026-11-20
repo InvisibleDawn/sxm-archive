@@ -30,8 +30,11 @@ indépendantes, qui concordent :
 Remarque : 7-Zip ne publie pas d'empreintes signées et ses exécutables ne portent pas de signature
 Authenticode ; la vérification repose donc sur cette concordance de sources.
 
-L'archive Linux `7z2501-linux-x64.tar.xz` (même release) ne sert qu'aux tests automatiques ; elle n'est
-pas distribuée.
+L'archive Linux `7z2501-linux-x64.tar.xz` (même release) est intégrée au paquet Fedora (`7zz`) et sert aux tests.
+
+L'archive macOS `7z2501-mac.tar.xz` (binaire universel `7zz`) est vérifiée contre `7zip.sha256` **et** comparée, à
+chaque compilation, au fichier téléchargé depuis https://www.7-zip.org/a/7z2501-mac.tar.xz (seconde source
+indépendante) ; la compilation macOS échoue si les deux diffèrent.
 
 ## Archives RAR de test
 

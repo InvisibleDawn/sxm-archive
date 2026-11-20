@@ -169,8 +169,8 @@ function confirmBox(ic, cls, title, body, okLabel = 'Continuer') {
 }
 const isPwErr = (r) => r?.error === 'PASSWORD_REQUIRED' || r?.error === 'PASSWORD_WRONG';
 
-function alertBox(ic, cls, title, body) {
-  return modal(`${head(ic, cls, title)}<div>${body}</div><div class="m-actions"><button class="btn primary" data-close>OK</button></div>`);
+function alertBox(ic, cls, title, body, onReady) {
+  return modal(`${head(ic, cls, title)}<div>${body}</div><div class="m-actions"><button class="btn primary" data-close>OK</button></div>`, onReady);
 }
 
 // ================= ouverture d'archive =================
@@ -545,6 +545,66 @@ api.onOpenFiles((files) => {
   pendingTimer = setTimeout(() => { const f = [...new Set(pending)]; pending = []; handleFiles(f); }, 400);
 });
 
+// ================= mises à jour =================
+const UPD_ERR = {
+  NETWORK: 'Impossible de joindre le serveur de mises à jour. Vérifiez la connexion Internet.',
+  SIGNATURE: 'La signature de la mise à jour est invalide : elle a été refusée par sécurité.',
+  NO_PLATFORM: 'Aucune mise à jour n\'est encore publiée pour ce système.',
+  NO_RELEASE: 'Aucune version publiée pour le moment.',
+  NO_UPDATE: 'Aucune mise à jour en attente.',
+  BUSY: 'Une installation est déjà en cours.',
+};
+const updErr = (e) => UPD_ERR[e] || `Erreur : ${e}`;
+const getPref = (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch { return d; } };
+const setPref = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+let lastUpdate = null;
+
+async function checkUpdates(manual) {
+  let info;
+  try { info = await api.checkUpdate(); } catch (e) { info = { enabled: true, error: String(e) }; }
+  setPref('lastUpdateCheck', String(Date.now()));
+  if (!info.enabled) {
+    if (manual) alertBox('refresh-cw', 'b-blue', 'Mises à jour', '<p>Les mises à jour intégrées ne sont pas activées dans cette version (version de développement ou non signée).</p>');
+    return;
+  }
+  if (info.error) { if (manual) alertBox('circle-alert', 'b-orange', 'Mises à jour', `<p>${esc(updErr(info.error))}</p>`); return; }
+  lastUpdate = info.available ? info : null;
+  $('#updBadge').classList.toggle('hidden', !info.available);
+  if (!info.available) {
+    if (manual) alertBox('shield-check', 'b-green', 'SXM Archive est à jour', `<p>Vous utilisez la dernière version (${esc(info.current)}).</p>${autoToggleHtml()}`, bindAutoToggle);
+    return;
+  }
+  if (manual) showUpdate(info);
+  else toast(`SXM Archive ${info.version} est disponible`, true, { label: 'Voir', fn: () => showUpdate(info) });
+}
+
+function autoToggleHtml() {
+  return `<label class="check" style="margin-top:12px"><input type="checkbox" id="autoUpd" ${getPref('autoUpdate', '1') === '1' ? 'checked' : ''}> Rechercher les mises à jour au démarrage</label>`;
+}
+function bindAutoToggle(m) { const c = $('#autoUpd', m); if (c) c.onchange = () => setPref('autoUpdate', c.checked ? '1' : '0'); }
+
+async function showUpdate(info) {
+  const linux = navigator.userAgent.includes('Linux');
+  const go = await modal(`${head('refresh-cw', 'b-blue', `Nouvelle version : ${esc(info.version)}`, `Version installée : ${esc(info.current)}`)}
+    ${info.notes ? `<div class="upd-notes">${esc(info.notes)}</div>` : ''}
+    <p class="hint">La mise à jour est téléchargée depuis GitHub et sa signature est vérifiée avant installation.${linux ? ' Fedora vous demandera votre mot de passe administrateur.' : ''} SXM Archive redémarrera ensuite.</p>
+    ${autoToggleHtml()}
+    <div class="m-actions"><button class="btn" data-close>Plus tard</button><button class="btn primary" id="ok">Installer et redémarrer</button></div>`,
+  (m, close) => { bindAutoToggle(m); $('#ok', m).onclick = () => close(true); });
+  if (!go) return;
+  if (busy) return toast(ERR.BUSY, false);
+  modal(`${head('refresh-cw', 'b-blue', `Installation de la version ${esc(info.version)}`, 'Téléchargement et vérification…')}
+    <div class="upd-bar"><div id="updBar"></div></div><p class="hint" id="updPct">0 %</p>`);
+  try {
+    await api.installUpdate();
+  } catch (e) {
+    $('#overlay').classList.add('hidden');
+    alertBox('circle-alert', 'b-orange', 'Mise à jour impossible', `<p>${esc(updErr(String(e)))}</p>`);
+  }
+}
+api.onUpdateProgress((p) => { const b = $('#updBar'); if (b) { b.style.width = p + '%'; $('#updPct').textContent = p + ' %'; } });
+$('#updateBtn').onclick = () => (lastUpdate ? showUpdate(lastUpdate) : checkUpdates(true));
+
 // ================= démarrage =================
 (async () => {
   hydrate();
@@ -555,4 +615,7 @@ api.onOpenFiles((files) => {
   $('#engine').textContent = 'Moteur ' + i.engine;
   setView('home');
   status('Prêt — ouvrez une archive ou glissez des fichiers');
+  // vérification automatique : au plus une fois par jour, en arrière-plan
+  const last = +getPref('lastUpdateCheck', '0');
+  if (getPref('autoUpdate', '1') === '1' && Date.now() - last > 24 * 3600 * 1000) setTimeout(() => checkUpdates(false), 4000);
 })();

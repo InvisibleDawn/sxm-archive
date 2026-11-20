@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "SXM Archive",
   "mainBinaryName": "sxm-archive",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "identifier": "com.sxm.archive",
   "build": {
     "frontendDist": "../ui"
@@ -27,12 +27,15 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis"],
+    "targets": [
+      "msi",
+      "nsis"
+    ],
     "category": "Utility",
     "shortDescription": "Ouvrir, extraire et créer des archives",
-    "longDescription": "SXM Archive : gestionnaire d'archives RAR, ZIP, 7z et tar.gz avec chiffrement AES-256, moteur 7-Zip intégré.",
-    "copyright": "© 2026 Laurent Honoré",
-    "publisher": "Laurent Honoré",
+    "longDescription": "SXM Archive : gestionnaire d'archives RAR, ZIP, 7z et tar.gz avec chiffrement AES-256, moteur 7-Zip 25.01 intégré. Édité par Invisible_Dawn.",
+    "copyright": "© 2026 Invisible_Dawn",
+    "publisher": "Invisible_Dawn",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -41,10 +44,51 @@
       "icons/icon.png"
     ],
     "fileAssociations": [
-      { "ext": ["zip"], "name": "Archive ZIP", "description": "Archive ZIP", "role": "Editor" },
-      { "ext": ["7z"], "name": "Archive 7z", "description": "Archive 7z", "role": "Editor" },
-      { "ext": ["rar"], "name": "Archive RAR", "description": "Archive RAR", "role": "Viewer" },
-      { "ext": ["tgz", "gz"], "name": "Archive tar.gz", "description": "Archive tar.gz", "role": "Editor" }
+      {
+        "ext": [
+          "zip"
+        ],
+        "name": "Archive ZIP",
+        "description": "Archive ZIP",
+        "role": "Editor",
+        "mimeType": "application/zip"
+      },
+      {
+        "ext": [
+          "7z"
+        ],
+        "name": "Archive 7z",
+        "description": "Archive 7z",
+        "role": "Editor",
+        "mimeType": "application/x-7z-compressed"
+      },
+      {
+        "ext": [
+          "rar"
+        ],
+        "name": "Archive RAR",
+        "description": "Archive RAR",
+        "role": "Viewer",
+        "mimeType": "application/vnd.rar"
+      },
+      {
+        "ext": [
+          "tgz"
+        ],
+        "name": "Archive tar.gz",
+        "description": "Archive tar.gz",
+        "role": "Editor",
+        "mimeType": "application/x-compressed-tar"
+      },
+      {
+        "ext": [
+          "gz"
+        ],
+        "name": "Archive gzip",
+        "description": "Archive gzip",
+        "role": "Editor",
+        "mimeType": "application/gzip"
+      }
     ],
     "resources": {
       "bin/": "bin/"
@@ -53,11 +97,33 @@
       "nsis": {
         "installMode": "currentUser",
         "installerIcon": "icons/icon.ico",
-        "languages": ["French"],
+        "languages": [
+          "French"
+        ],
         "installerHooks": "windows/hooks.nsh"
       },
       "wix": {
         "language": "fr-FR"
+      }
+    },
+    "linux": {
+      "rpm": {
+        "depends": [
+          "webkit2gtk4.1",
+          "gtk3",
+          "libstdc++"
+        ],
+        "recommends": [
+          "caja-actions"
+        ],
+        "release": "1",
+        "files": {
+          "/usr/share/file-manager/actions/sxm-archive-compress.desktop": "linux/caja-compress.desktop",
+          "/usr/share/nemo/actions/sxm-archive-compress.nemo_action": "linux/nemo-compress.nemo_action",
+          "/usr/share/licenses/sxm-archive/7-Zip-License.txt": "bin/License.txt"
+        },
+        "desktopTemplate": "linux/sxm-archive.desktop",
+        "postRemoveScript": "linux/postun.sh"
       }
     }
   }

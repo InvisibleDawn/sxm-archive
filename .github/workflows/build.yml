@@ -1,76 +1,296 @@
-# Compile SXM Archive pour Windows sur les serveurs de GitHub (vraie machine Windows, pas de Wine).
-# Lancement : à chaque envoi sur main, à chaque tag "v*" (ex. v2.1.0 → page Releases), ou manuellement (onglet Actions).
+# SXM Archive — contrôle, tests, compilation Windows et publication.
+#
+# - Chaque Pull Request et chaque envoi sur main : contrôles + tests + installateurs Windows et Fedora (artefacts), sans publication.
+# - Publication dans « Releases » UNIQUEMENT :
+#     a) en lançant ce workflow à la main (onglet Actions → « Run workflow ») sur main avec « publier » coché, ou
+#     b) en poussant un tag vX.Y.Z identique à la version de src-tauri/tauri.conf.json.
+#   La publication n'a lieu qu'après la réussite de tous les tests, et elle échoue si la version existe déjà :
+#   une release ou un tag existants ne sont JAMAIS supprimés ni remplacés.
 name: Compiler SXM Archive
 
 on:
-  workflow_dispatch:
+  pull_request:
   push:
-    branches: [main, publier]   # publier : compile ET publie la version dans Releases
+    branches: [main]
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publier:
+        description: "Publier cette version dans Releases (main uniquement)"
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  SEVENZIP_TAG: "25.01"
+  CARGO_TERM_COLOR: always
 
 jobs:
+  # ---------------------------------------------------------------- contrôles rapides (Linux)
+  controles:
+    name: Contrôles et tests (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+        with: { components: "clippy, rustfmt" }
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: src-tauri }
+      - name: Dépendances système Tauri
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev
+      - name: Version cohérente (package.json / Cargo.toml / tauri.conf.json)
+        run: |
+          A=$(node -p "require('./package.json').version")
+          B=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          C=$(grep -m1 '^version' src-tauri/Cargo.toml | cut -d'"' -f2)
+          echo "package.json=$A tauri.conf.json=$B Cargo.toml=$C"
+          test "$A" = "$B" && test "$B" = "$C"
+      - name: Syntaxe JavaScript
+        run: for f in ui/*.js; do node --check "$f"; done
+      - name: 7-Zip (Linux, pour les tests) — vérification SHA-256
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release download "$SEVENZIP_TAG" --repo ip7z/7zip --pattern "7z2501-linux-x64.tar.xz" --dir "$RUNNER_TEMP"
+          (cd "$RUNNER_TEMP" && grep ' 7z2501-linux-x64.tar.xz$' "$GITHUB_WORKSPACE/third_party/7zip.sha256" | sha256sum -c -)
+          mkdir -p src-tauri/bin && tar xJf "$RUNNER_TEMP/7z2501-linux-x64.tar.xz" -C src-tauri/bin 7zz
+      - name: Formatage Rust
+        working-directory: src-tauri
+        run: cargo fmt --check
+      - name: Clippy (avertissements = erreurs)
+        working-directory: src-tauri
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Tests du moteur
+        working-directory: src-tauri
+        run: cargo test --locked -- --nocapture
+
+  # ---------------------------------------------------------------- Windows : tests, installateurs, installation réelle
   windows:
-    runs-on: windows-latest
+    name: Windows (${{ matrix.os }})
+    needs: controles
+    strategy:
+      fail-fast: false
+      matrix:
+        # windows-2022 ≈ noyau Windows 10 21H2, windows-2025 ≈ noyau Windows 11 24H2 (éditions Server)
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 60
+    defaults:
+      run: { shell: pwsh }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
-        with: { workspaces: src-tauri }
+        with: { workspaces: src-tauri, key: "${{ matrix.os }}" }
 
-      # Moteur 7-Zip officiel (github.com/ip7z/7zip) : 7z.exe + 7z.dll embarqués dans l'application.
-      - name: Embarquer 7-Zip
-        shell: pwsh
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download 25.01 --repo ip7z/7zip --pattern "7z2501-x64.exe" --dir $env:RUNNER_TEMP --clobber
-          & "C:\Program Files\7-Zip\7z.exe" x "$env:RUNNER_TEMP\7z2501-x64.exe" "-o$env:RUNNER_TEMP\7zx" -y | Out-Null
-          New-Item -ItemType Directory -Force src-tauri/bin | Out-Null
-          Copy-Item "$env:RUNNER_TEMP\7zx\7z.exe","$env:RUNNER_TEMP\7zx\7z.dll","$env:RUNNER_TEMP\7zx\License.txt" src-tauri/bin/
-          & src-tauri/bin/7z.exe i | Select-Object -First 3
-
-      - name: Version (depuis le tag)
+      - name: Version du tag = version de l'application
         if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
         run: |
-          node -e "const f='src-tauri/tauri.conf.json';const c=require('./'+f);c.version=process.env.GITHUB_REF_NAME.replace(/^v/,'');require('fs').writeFileSync(f,JSON.stringify(c,null,2))"
+          $v = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$v" -ne $env:GITHUB_REF_NAME) { throw "Le tag $env:GITHUB_REF_NAME ne correspond pas à la version $v" }
+
+      - name: Embarquer 7-Zip 25.01 (vérification SHA-256)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sums = @{}
+          Get-Content third_party/7zip.sha256 | ForEach-Object { $h, $n = $_ -split '\s+', 2; $sums[$n.Trim()] = $h.ToLower() }
+          function Check($path) {
+            $name = Split-Path $path -Leaf
+            $h = (Get-FileHash $path -Algorithm SHA256).Hash.ToLower()
+            if ($h -ne $sums[$name]) { throw "Empreinte SHA-256 invalide pour ${name} : $h" }
+            Write-Host "OK  $name  $h"
+          }
+          gh release download $env:SEVENZIP_TAG --repo ip7z/7zip --pattern "7z2501-x64.exe" --dir $env:RUNNER_TEMP --clobber
+          Check "$env:RUNNER_TEMP\7z2501-x64.exe"
+          & "C:\Program Files\7-Zip\7z.exe" x "$env:RUNNER_TEMP\7z2501-x64.exe" "-o$env:RUNNER_TEMP\7zx" 7z.exe 7z.dll License.txt -y | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw "extraction de l'installateur 7-Zip impossible" }
+          New-Item -ItemType Directory -Force src-tauri/bin | Out-Null
+          foreach ($f in '7z.exe', '7z.dll', 'License.txt') { Check "$env:RUNNER_TEMP\7zx\$f"; Copy-Item "$env:RUNNER_TEMP\7zx\$f" src-tauri/bin/ }
+
+      - name: Tests du moteur (Windows)
+        working-directory: src-tauri
+        run: cargo test --locked -- --nocapture
 
       - run: npm ci
-      - name: Compiler
+      - name: Compiler les installateurs
         run: npx tauri build --bundles msi,nsis
 
-      - name: Vérifier l'installation silencieuse
-        shell: pwsh
+      - name: Installer / vérifier / désinstaller (NSIS)
         run: |
+          $ErrorActionPreference = 'Stop'
           $exe = Get-ChildItem src-tauri/target/release/bundle/nsis/*.exe | Select-Object -First 1
-          Start-Process $exe.FullName -ArgumentList "/S" -Wait
+          Start-Process $exe.FullName -ArgumentList '/S' -Wait
           $dir = "$env:LOCALAPPDATA\SXM Archive"
-          if (!(Test-Path "$dir\sxm-archive.exe")) { throw "sxm-archive.exe non installé" }
-          if (!(Test-Path "$dir\bin\7z.exe")) { throw "7z.exe non installé" }
-          & "$dir\bin\7z.exe" a "$env:RUNNER_TEMP\t.zip" README.md | Out-Null
-          & "$dir\bin\7z.exe" t "$env:RUNNER_TEMP\t.zip"
+          foreach ($f in 'sxm-archive.exe', 'bin\7z.exe', 'bin\7z.dll', 'bin\License.txt') {
+            if (!(Test-Path "$dir\$f")) { throw "$f non installé" }
+          }
+          # moteur installé : aller-retour réel
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\src\Dossier é" | Out-Null
+          Set-Content "$env:RUNNER_TEMP\src\Dossier é\fichier.txt" "SXM"
+          & "$dir\bin\7z.exe" a "$env:RUNNER_TEMP\t.7z" "$env:RUNNER_TEMP\src\Dossier é" -pTest -mhe=on | Out-Null
+          & "$dir\bin\7z.exe" t "$env:RUNNER_TEMP\t.7z" -pTest | Out-Null
           if ($LASTEXITCODE -ne 0) { throw "7-Zip installé ne fonctionne pas" }
+          # menu contextuel de l'Explorateur
+          foreach ($k in 'HKCU:\Software\Classes\*\shell\SXMArchiveAdd\command', 'HKCU:\Software\Classes\Directory\shell\SXMArchiveAdd\command') {
+            $cmd = (Get-ItemProperty -LiteralPath $k).'(default)'
+            if ($cmd -notlike "*sxm-archive.exe*%1*") { throw "Menu contextuel absent ou incorrect : $k = $cmd" }
+            Write-Host "OK  $k = $cmd"
+          }
+          # associations de fichiers
+          foreach ($ext in '.zip', '.7z', '.rar') {
+            $prog = (Get-ItemProperty -LiteralPath "HKCU:\Software\Classes\$ext" -ErrorAction SilentlyContinue).'(default)'
+            Write-Host "Association $ext -> $prog"
+            if (-not $prog) { throw "Association $ext absente" }
+          }
+          # désinstallation
+          Start-Process "$dir\uninstall.exe" -ArgumentList '/S' -Wait
+          Start-Sleep -Seconds 5
+          if (Test-Path "$dir\sxm-archive.exe") { throw "sxm-archive.exe toujours présent après désinstallation" }
+          foreach ($k in 'HKCU:\Software\Classes\*\shell\SXMArchiveAdd', 'HKCU:\Software\Classes\Directory\shell\SXMArchiveAdd') {
+            if (Test-Path -LiteralPath $k) { throw "Clé de menu contextuel non supprimée : $k" }
+          }
+          Write-Host "Installation et désinstallation NSIS : OK"
+
+      - name: Installer / désinstaller (MSI)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = Get-ChildItem src-tauri/target/release/bundle/msi/*.msi | Select-Object -First 1
+          $p = Start-Process msiexec -ArgumentList "/i `"$($msi.FullName)`" /qn /l*v `"$env:RUNNER_TEMP\msi-i.log`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content "$env:RUNNER_TEMP\msi-i.log" -Tail 40; throw "Installation MSI : code $($p.ExitCode)" }
+          $exe = Get-ChildItem 'C:\Program Files\SXM Archive', "$env:LOCALAPPDATA\Programs\SXM Archive", "$env:LOCALAPPDATA\SXM Archive" -Filter sxm-archive.exe -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "sxm-archive.exe introuvable après installation MSI" }
+          if (!(Test-Path (Join-Path $exe.DirectoryName 'bin\7z.exe'))) { throw "7z.exe absent (MSI)" }
+          Write-Host "MSI installé dans $($exe.DirectoryName)"
+          $p = Start-Process msiexec -ArgumentList "/x `"$($msi.FullName)`" /qn /l*v `"$env:RUNNER_TEMP\msi-x.log`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Désinstallation MSI : code $($p.ExitCode)" }
+          if (Test-Path $exe.FullName) { throw "sxm-archive.exe toujours présent après désinstallation MSI" }
+          Write-Host "Installation et désinstallation MSI : OK"
+
+      - name: Empreintes des installateurs
+        run: |
+          $files = Get-ChildItem src-tauri/target/release/bundle/msi/*.msi, src-tauri/target/release/bundle/nsis/*.exe
+          $files | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower(), $_.Name } | Set-Content -Encoding ascii SHA256SUMS.txt
+          Get-Content SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v4
         with:
-          name: sxm-archive-windows
+          name: sxm-archive-${{ matrix.os }}
+          if-no-files-found: error
           path: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
+            SHA256SUMS.txt
 
-      - name: Publier (page Releases)
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/publier'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
+  # ---------------------------------------------------------------- Fedora : paquet .rpm, installation réelle dans Fedora
+  fedora:
+    name: Fedora (.rpm)
+    needs: controles
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with: { workspaces: src-tauri, key: rpm }
+      - name: Dépendances système Tauri
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev librsvg2-dev
+      - name: Embarquer 7-Zip 25.01 Linux (vérification SHA-256)
+        env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          V="v$(node -p "require('./src-tauri/tauri.conf.json').version")"
-          gh release delete "$V" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$V" --target "$GITHUB_SHA" --title "SXM Archive ${V#v}" --notes "Installateurs Windows 10/11 (64 bits). Le .exe est recommandé." \
-            src-tauri/target/release/bundle/msi/*.msi src-tauri/target/release/bundle/nsis/*.exe
+          gh release download "$SEVENZIP_TAG" --repo ip7z/7zip --pattern "7z2501-linux-x64.tar.xz" --dir "$RUNNER_TEMP"
+          (cd "$RUNNER_TEMP" && grep ' 7z2501-linux-x64.tar.xz$' "$GITHUB_WORKSPACE/third_party/7zip.sha256" | sha256sum -c -)
+          mkdir -p src-tauri/bin && tar xJf "$RUNNER_TEMP/7z2501-linux-x64.tar.xz" -C src-tauri/bin 7zz License.txt
+      - run: npm ci
+      - name: Compiler le paquet .rpm
+        run: npx tauri build --bundles rpm
+      - name: Installer / vérifier / désinstaller dans Fedora
+        run: |
+          RPM=$(ls src-tauri/target/release/bundle/rpm/*.rpm)
+          cp "$RPM" sxm-archive.rpm
+          docker run --rm -v "$PWD:/w" -w /w fedora:latest bash -euxc '
+            cat /etc/fedora-release
+            dnf -y -q install ./sxm-archive.rpm xorg-x11-server-Xvfb xorg-x11-xauth
+            rpm -qi sxm-archive | grep -E "^(Name|Version|Release)"
+            test -x /usr/bin/sxm-archive
+            Z="/usr/lib/SXM Archive/bin/7zz"
+            "$Z" i | head -1
+            grep -q "Exec=sxm-archive %F" "/usr/share/applications/SXM Archive.desktop"
+            test -f /usr/share/file-manager/actions/sxm-archive-compress.desktop
+            test -f /usr/share/licenses/sxm-archive/7-Zip-License.txt
+            mkdir -p "/tmp/src/Dossier é" && echo SXM > "/tmp/src/Dossier é/fichier.txt"
+            "$Z" a /tmp/t.7z "/tmp/src/Dossier é" -pTest -mhe=on >/dev/null && "$Z" t /tmp/t.7z -pTest >/dev/null
+            # lancement réel de l application (doit rester ouverte 10 s sans planter)
+            set +e; timeout 10 xvfb-run -a sxm-archive /tmp/t.7z > /tmp/app.log 2>&1; rc=$?; set -e
+            grep -v -i -E "egl|dri3|mesa|libGL" /tmp/app.log | tail -5 || true
+            if [ "$rc" -ne 124 ]; then echo "sxm-archive s est arrete (code $rc)"; exit 1; fi
+            dnf -y -q remove sxm-archive
+            if [ -e /usr/bin/sxm-archive ] || [ -e "/usr/lib/SXM Archive" ]; then find /usr/bin/sxm-archive "/usr/lib/SXM Archive" 2>/dev/null; echo "fichiers restants apres desinstallation"; exit 1; fi
+            echo "Fedora : installation, lancement et desinstallation OK"
+          '
+      - name: Empreinte
+        run: |
+          cd src-tauri/target/release/bundle/rpm && for f in *.rpm; do echo "$(sha256sum "$f" | cut -d' ' -f1)  $f"; done | tee "$GITHUB_WORKSPACE/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sxm-archive-fedora
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/rpm/*.rpm
+            SHA256SUMS.txt
+
+  # ---------------------------------------------------------------- publication (jamais destructive)
+  publier:
+    name: Publier dans Releases
+    needs: [windows, fedora]
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') ||
+      (github.event_name == 'workflow_dispatch' && inputs.publier && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version
+        id: v
+        run: echo "tag=v$(node -p "require('./src-tauri/tauri.conf.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Refuser d'écraser une version existante
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          if gh release view "${{ steps.v.outputs.tag }}" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::La release ${{ steps.v.outputs.tag }} existe déjà. Augmentez la version au lieu de la remplacer."
+            exit 1
+          fi
+          if [ "${GITHUB_REF_TYPE}" != "tag" ] && git ls-remote --exit-code --tags origin "refs/tags/${{ steps.v.outputs.tag }}" >/dev/null; then
+            echo "::error::Le tag ${{ steps.v.outputs.tag }} existe déjà."
+            exit 1
+          fi
+      # les installateurs publiés sont ceux construits et testés (windows-2025 et Fedora)
+      - uses: actions/download-artifact@v4
+        with: { name: sxm-archive-windows-2025, path: dist/windows }
+      - uses: actions/download-artifact@v4
+        with: { name: sxm-archive-fedora, path: dist/fedora }
+      - name: Créer la release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          mapfile -t FILES < <(find dist -type f \( -name '*.exe' -o -name '*.msi' -o -name '*.rpm' \) | sort)
+          printf '%s\n' "${FILES[@]}"
+          : > SHA256SUMS.txt
+          for f in "${FILES[@]}"; do echo "$(sha256sum "$f" | cut -d' ' -f1)  $(basename "$f")" >> SHA256SUMS.txt; done
+          cat SHA256SUMS.txt
+          gh release create "${{ steps.v.outputs.tag }}" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "SXM Archive ${{ steps.v.outputs.tag }}" \
+            --notes "Windows 10/11 64 bits : .exe (recommandé) ou .msi. Fedora : .rpm (sudo dnf install ./fichier.rpm). Éditeur Invisible_Dawn. Empreintes SHA-256 dans SHA256SUMS.txt. Non signé (Authenticode) : Windows SmartScreen peut afficher un avertissement." \
+            "${FILES[@]}" SHA256SUMS.txt

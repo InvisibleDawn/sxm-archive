@@ -1,9 +1,9 @@
 {
   "name": "sxm-archive",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "SXM Archive — gestionnaire d'archives RAR, ZIP, 7z, tar.gz",
-  "author": "Laurent Honoré",
+  "author": "Invisible_Dawn",
   "license": "MIT",
   "scripts": {
     "tauri": "tauri",

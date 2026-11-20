@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Action
+Name=Compresser avec SXM Archive
+Name[en]=Compress with SXM Archive
+Icon=sxm-archive
+Profiles=sxm;
+
+[X-Action-Profile sxm]
+Name=Compresser
+MimeTypes=all/all;
+Exec=/usr/bin/sxm-archive %F

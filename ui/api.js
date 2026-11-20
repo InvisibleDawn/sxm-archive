@@ -14,6 +14,7 @@
     compress: (req) => invoke('compress', { req }),
     convert: (req) => invoke('convert', { req }),
     openMember: (req) => invoke('open_member', { req }),
+    cancel: () => invoke('cancel'),
     showInFolder: (path) => invoke('show_in_folder', { path }),
     openPath: (path) => invoke('open_path', { path }),
     stat: (path) => invoke('stat', { path }),

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Categories={{categories}}Archiving;Compression;
+Comment={{comment}}
+Comment[en]=Open, extract and create archives
+Exec={{exec}} %F
+StartupWMClass={{exec}}
+Icon={{icon}}
+Name={{name}}
+GenericName=Gestionnaire d'archives
+GenericName[en]=Archive manager
+Keywords=zip;7z;rar;tar;gz;archive;compresser;extraire;
+Terminal=false
+Type=Application
+MimeType={{mime_type}};

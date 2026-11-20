@@ -1,8 +1,8 @@
 [package]
 name = "sxm-archive"
-version = "2.1.0"
+version = "2.2.0"
 description = "SXM Archive - gestionnaire d'archives RAR, ZIP, 7z, tar.gz"
-authors = ["Laurent Honoré"]
+authors = ["Invisible_Dawn"]
 edition = "2021"
 
 [build-dependencies]

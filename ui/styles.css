@@ -206,3 +206,6 @@ img.brand-logo { background: none; box-shadow: none; width: 42px; height: 42px; 
 .home-body { padding: 18px 30px 20px; }
 .card { padding: 15px 16px; }
 @media (max-height: 760px) { .side-illu { display: none; } }
+
+.cancel-btn { font-size: 12px; padding: 2px 10px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); }
+.cancel-btn:hover { background: var(--line2); color: var(--text); }

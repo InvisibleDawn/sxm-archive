@@ -1,0 +1,7 @@
+[Nemo Action]
+Name=Compresser avec SXM Archive
+Comment=Créer une archive ZIP, 7z ou tar.gz
+Exec=/usr/bin/sxm-archive %F
+Icon-Name=sxm-archive
+Selection=notnone
+Extensions=any;

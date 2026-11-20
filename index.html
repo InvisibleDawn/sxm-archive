@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SXM Archive</title>
+</head>
+<body class="at-home">
+  <div id="app">
+    <!-- Barre latérale (même disposition que SXM PDF) -->
+    <nav id="rail">
+      <div class="side-brand">
+        <img src="/logo.png" alt="" />
+        <div><b>SXM Archive</b><span id="app-version">v3.0.0</span></div>
+      </div>
+      <button class="rail-btn" data-act="home" title="Accueil"><i data-lucide="house"></i><span>Accueil</span></button>
+      <button class="rail-btn" data-act="open" title="Ouvrir une archive (Ctrl+O)"><i data-lucide="folder-open"></i><span>Ouvrir une archive</span></button>
+      <button class="rail-btn" data-act="compress" title="Créer une archive (Ctrl+N)"><i data-lucide="package-plus"></i><span>Créer une archive</span></button>
+      <button class="rail-btn" data-act="extract" title="Extraire (Ctrl+E)"><i data-lucide="folder-output"></i><span>Extraire</span></button>
+      <button class="rail-btn" data-act="protect" title="Protéger par mot de passe"><i data-lucide="lock"></i><span>Protéger</span></button>
+      <button class="rail-btn" data-act="test" title="Tester une archive"><i data-lucide="shield-check"></i><span>Tester une archive</span></button>
+      <button class="rail-btn" data-act="convert" title="Convertir une archive"><i data-lucide="repeat"></i><span>Convertir</span></button>
+      <div class="side-sep"></div>
+      <button class="rail-btn small" data-act="theme" title="Thème clair / sombre"><i data-lucide="sun-moon"></i><span>Thème clair / sombre</span></button>
+      <button class="rail-btn small" data-act="pin" title="Épingler l'application"><i data-lucide="pin"></i><span>Épingler l'application</span></button>
+      <button class="rail-btn small" data-act="about" title="À propos"><i data-lucide="info"></i><span>À propos</span></button>
+      <div class="rail-spacer"></div>
+      <div class="side-card">
+        <img src="/illustrations/archive.svg" alt="" />
+        <p>Vos archives, simplement :<br />compresser, extraire, protéger.<br /><b>100 % hors ligne.</b></p>
+      </div>
+    </nav>
+
+    <div id="column">
+      <header id="topbar">
+        <div class="doc-pill hidden" id="doc-pill" data-act="back" title="Revenir à l'archive"><i data-lucide="file-archive"></i><span id="doc-name" data-no-tr></span>
+          <button class="x" data-act="close" title="Fermer l'archive (Ctrl+W)">×</button></div>
+        <div class="spacer"></div>
+        <div class="top-actions">
+          <button class="ghost" data-act="compress" title="Créer une archive (Ctrl+N)"><i data-lucide="package-plus"></i></button>
+          <button class="ghost" data-act="open" title="Ouvrir une archive (Ctrl+O)"><i data-lucide="folder-open"></i></button>
+          <button class="btn accent" data-act="extract" title="Extraire l'archive (Ctrl+E)"><i data-lucide="folder-output"></i> Extraire</button>
+          <div class="menu">
+            <button class="ghost" data-menu="more" title="Plus"><i data-lucide="ellipsis"></i></button>
+            <div class="menu-pop right" id="menu-more">
+              <button data-act="extract-here">Extraire ici</button>
+              <button data-act="test">Tester l'archive</button>
+              <button data-act="info">Informations sur l'archive</button>
+              <hr />
+              <button data-act="convert">Convertir…</button>
+              <button data-act="protect">Créer une archive protégée…</button>
+              <hr />
+              <button data-act="updates">Rechercher les mises à jour…</button>
+              <button data-act="about">À propos de SXM Archive</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Ruban simplifié (style nouvel Outlook, comme SXM PDF) -->
+      <section id="ribbon">
+        <div class="rib-tabs">
+          <button data-rib="home" class="on"><i data-lucide="house"></i><span>Accueil</span></button>
+          <button data-rib="archive"><i data-lucide="archive"></i><span>Archive</span></button>
+          <button data-rib="security"><i data-lucide="shield-check"></i><span>Sécurité</span></button>
+          <button data-rib="tools"><i data-lucide="wrench"></i><span>Outils</span></button>
+        </div>
+        <div class="rib-panel" data-panel="home">
+          <button data-act="open" title="Ouvrir une archive (Ctrl+O)"><i data-lucide="folder-open"></i><span>Ouvrir</span></button>
+          <button data-act="compress" title="Créer une archive (Ctrl+N)"><i data-lucide="package-plus"></i><span>Créer</span></button>
+          <span class="sep"></span>
+          <button data-act="extract" data-need="arc" title="Extraire vers… (Ctrl+E)"><i data-lucide="folder-output"></i><span>Extraire</span></button>
+          <button data-act="extract-here" data-need="arc" title="Extraire ici"><i data-lucide="hard-drive"></i><span>Extraire ici</span></button>
+          <button data-act="test" data-need="arc" title="Tester l'archive"><i data-lucide="shield-check"></i><span>Tester</span></button>
+          <button data-act="info" data-need="arc" title="Informations sur l'archive"><i data-lucide="info"></i><span>Infos</span></button>
+          <span class="sep"></span>
+          <button data-act="compress" class="accent-btn"><i data-lucide="package-plus"></i><span>Compresser</span></button>
+        </div>
+        <div class="rib-panel hidden" data-panel="archive">
+          <button data-act="up" data-need="sub" title="Dossier parent (Retour arrière)"><i data-lucide="arrow-up"></i><span>Dossier parent</span></button>
+          <button data-act="view" data-need="arc" title="Ouvrir le fichier sélectionné (Entrée)"><i data-lucide="eye"></i><span>Ouvrir le fichier</span></button>
+          <button data-act="select-all" data-need="arc" title="Tout sélectionner (Ctrl+A)"><i data-lucide="check-check"></i><span>Tout sélectionner</span></button>
+          <span class="sep"></span>
+          <button data-act="extract-sel" data-need="arc" title="Extraire la sélection"><i data-lucide="folder-output"></i><span>Extraire la sélection</span></button>
+          <button data-act="extract-here" data-need="arc" title="Extraire ici"><i data-lucide="hard-drive"></i><span>Extraire ici</span></button>
+          <span class="sep"></span>
+          <button data-act="info" data-need="arc" title="Informations sur l'archive"><i data-lucide="info"></i><span>Infos</span></button>
+        </div>
+        <div class="rib-panel hidden" data-panel="security">
+          <button data-act="protect" title="Créer une archive protégée (AES-256)"><i data-lucide="lock"></i><span>Archive protégée</span></button>
+          <button data-act="test" data-need="arc" title="Tester l'intégrité"><i data-lucide="shield-check"></i><span>Tester</span></button>
+          <span class="sep"></span>
+          <button data-act="forget-pw" data-need="pw" title="Oublier le mot de passe saisi"><i data-lucide="key-round"></i><span>Oublier le mot de passe</span></button>
+        </div>
+        <div class="rib-panel hidden" data-panel="tools">
+          <button data-act="convert" title="Convertir une archive (RAR → ZIP, 7z…)"><i data-lucide="repeat"></i><span>Convertir</span></button>
+          <button data-act="compress-folder" title="Compresser un dossier"><i data-lucide="folder-plus"></i><span>Compresser un dossier</span></button>
+          <span class="sep"></span>
+          <button data-act="updates" title="Rechercher les mises à jour"><i data-lucide="refresh-cw"></i><span>Mises à jour</span></button>
+        </div>
+      </section>
+
+      <main id="main">
+        <section id="docs">
+          <div id="empty">
+            <div class="hero">
+              <img class="hero-logo" src="/logo.png" alt="" />
+              <div class="hero-text">
+                <h1>SXM Archive</h1>
+                <p>Ouvrez, compressez et protégez vos archives.<br />RAR, ZIP, 7z et tar.gz — rapide et 100 % hors ligne.</p>
+              </div>
+              <div class="hero-art" aria-hidden="true"></div>
+            </div>
+            <div class="section-head"><i data-lucide="layout-grid"></i><h2>Que voulez-vous faire ?</h2></div>
+            <div class="home-grid">
+              <button class="home-card" data-act="open"><span class="ic" style="--ic:#1867d8"><i data-lucide="folder-open"></i></span>
+                <span class="txt"><b>Ouvrir une archive</b><span>Parcourir un RAR, ZIP, 7z ou tar.gz.</span></span><span class="chip">Ctrl+O</span></button>
+              <button class="home-card" data-act="compress"><span class="ic" style="--ic:#0f8f8c"><i data-lucide="package-plus"></i></span>
+                <span class="txt"><b>Créer une archive</b><span>Compresser fichiers et dossiers en ZIP, 7z ou tar.gz.</span></span><span class="chip">Ctrl+N</span></button>
+              <button class="home-card" data-act="extract"><span class="ic" style="--ic:#7c3aed"><i data-lucide="folder-output"></i></span>
+                <span class="txt"><b>Extraire</b><span>Décompresser tout ou partie d'une archive.</span></span><span class="chip">Ctrl+E</span></button>
+              <button class="home-card" data-act="protect"><span class="ic" style="--ic:#16a34a"><i data-lucide="lock"></i></span>
+                <span class="txt"><b>Protéger par mot de passe</b><span>Chiffrement AES-256 pour ZIP et 7z.</span></span><span class="chip">AES-256</span></button>
+              <button class="home-card" data-act="test"><span class="ic" style="--ic:#ea580c"><i data-lucide="shield-check"></i></span>
+                <span class="txt"><b>Tester une archive</b><span>Vérifier qu'une archive n'est pas endommagée.</span></span><span class="chip">Intégrité</span></button>
+              <button class="home-card" data-act="convert"><span class="ic" style="--ic:#0891b2"><i data-lucide="repeat"></i></span>
+                <span class="txt"><b>Convertir</b><span>Transformer un RAR en ZIP ou 7z, et inversement.</span></span><span class="chip">RAR → ZIP / 7z</span></button>
+            </div>
+            <div class="home-bottom">
+              <div class="dropzone"><i data-lucide="upload"></i><div><b>Glissez-déposez vos fichiers ici</b><span>Une archive s'ouvre, des fichiers ou dossiers se compressent.</span></div></div>
+              <button class="btn-xl" data-act="open"><i data-lucide="folder-open"></i>Ouvrir une archive</button>
+            </div>
+          </div>
+
+          <div id="view-archive" class="hidden">
+            <div class="arc-head">
+              <span class="ic"><i data-lucide="file-archive"></i></span>
+              <div class="arc-meta"><b id="arc-name" data-no-tr></b><span id="arc-sub"></span></div>
+              <label class="search"><i data-lucide="search"></i><input id="filter" type="text" placeholder="Rechercher dans l'archive" /></label>
+            </div>
+            <div class="pathbar">
+              <button class="ghost" data-act="up" data-need="sub" title="Dossier parent (Retour arrière)"><i data-lucide="arrow-up"></i></button>
+              <div class="crumbs" id="crumbs"></div>
+            </div>
+            <div class="table-wrap">
+              <table class="files">
+                <thead><tr>
+                  <th data-sort="name" class="sorted">Nom</th><th data-sort="size" class="r">Taille</th><th data-sort="packed" class="r">Compressé</th>
+                  <th data-sort="type">Type</th><th data-sort="date">Modifié</th>
+                </tr></thead>
+                <tbody id="rows"></tbody>
+              </table>
+              <div class="empty-dir hidden" id="empty-dir">Ce dossier est vide.</div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer id="statusbar">
+        <span id="status-left">SXM Archive</span>
+        <span class="grow"></span>
+        <span id="progress" class="hidden"><span class="bar"><i id="bar"></i></span><span id="pct">0 %</span>
+          <button id="cancel" title="Annuler l'opération">Annuler</button></span>
+        <span id="engine">Moteur 7-Zip 25.01</span>
+      </footer>
+    </div>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toasts"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

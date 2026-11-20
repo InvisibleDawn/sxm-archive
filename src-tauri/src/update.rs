@@ -1,134 +1,77 @@
-//! Mises à jour intégrées (Windows, macOS, Fedora).
-//!
-//! Le module officiel tauri-plugin-updater télécharge la nouvelle version depuis la page
-//! « Releases » de GitHub (`latest.json`) et **vérifie sa signature** (clé publique intégrée à
-//! l'application) avant toute installation. Une mise à jour non signée par la clé de l'éditeur
-//! est refusée.
-//!
-//! Le module n'est activé que si l'application a été compilée avec une clé publique
-//! (`plugins.updater.pubkey`, ajoutée par le workflow GitHub). Sinon, l'interface indique que les
-//! mises à jour ne sont pas disponibles pour cette version.
+//! Mises à jour (même fonctionnement que SXM PDF) : canal stable ou bêta, vérification de la signature
+//! avec la clé publique de `tauri.conf.json` (clé commune aux logiciels SXM d'Invisible_Dawn),
+//! jamais d'installation sans le clic de l'utilisateur.
 
 use serde::Serialize;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, Manager, Runtime};
-use tauri_plugin_updater::{Update, UpdaterExt};
+use tauri_plugin_updater::UpdaterExt;
 
-static ENABLED: AtomicBool = AtomicBool::new(false);
-static PENDING: Mutex<Option<Update>> = Mutex::new(None);
-static INSTALLING: AtomicBool = AtomicBool::new(false);
+const UPDATE_STABLE: &str = "https://github.com/InvisibleDawn/sxm-archive/releases/latest/download/latest.json";
+const UPDATE_BETA: &str = "https://github.com/InvisibleDawn/sxm-archive/releases/download/canal-beta/beta.json";
 
-/// Active le module si la configuration contient une clé publique non vide.
-pub fn init<R: Runtime>(app: &tauri::App<R>) {
-    let has_key = app
-        .config()
-        .plugins
-        .0
-        .get("updater")
-        .and_then(|u| u.get("pubkey"))
-        .and_then(|k| k.as_str())
-        .map(|k| !k.trim().is_empty())
-        .unwrap_or(false);
-    if has_key && app.handle().plugin(tauri_plugin_updater::Builder::new().build()).is_ok() {
-        ENABLED.store(true, Ordering::SeqCst);
-    }
+fn updater_for(app: &tauri::AppHandle, beta: bool) -> Result<tauri_plugin_updater::Updater, String> {
+    let url = tauri::Url::parse(if beta { UPDATE_BETA } else { UPDATE_STABLE }).map_err(|e| e.to_string())?;
+    app.updater_builder().endpoints(vec![url]).map_err(|e| e.to_string())?.build().map_err(|e| e.to_string())
 }
 
-#[derive(Serialize, Default)]
-pub struct UpdateInfo {
-    /// Le module de mise à jour est-il actif dans cette version ?
-    enabled: bool,
-    available: bool,
-    current: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    version: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    notes: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    date: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    error: Option<String>,
-}
-
-fn friendly(e: &tauri_plugin_updater::Error) -> String {
+/// Aucun fichier de mise à jour publié (ou rien pour ce système) : ce n'est pas une panne.
+fn aucune_version_publiee(e: &tauri_plugin_updater::Error) -> bool {
     use tauri_plugin_updater::Error as E;
-    match e {
-        E::Reqwest(_) | E::Network(_) => "NETWORK".into(),
-        E::Minisign(_) | E::Base64(_) | E::SignatureUtf8(_) => "SIGNATURE".into(),
-        E::TargetNotFound(_) | E::TargetsNotFound(..) => "NO_PLATFORM".into(),
-        E::ReleaseNotFound => "NO_RELEASE".into(),
-        other => other.to_string(),
-    }
+    matches!(e, E::ReleaseNotFound | E::TargetNotFound(_) | E::TargetsNotFound(..))
+        || e.to_string().contains("404")
+        || e.to_string().to_lowercase().contains("could not fetch a valid release json")
 }
 
-#[tauri::command]
-pub async fn check_update(app: AppHandle) -> UpdateInfo {
-    let current = app.package_info().version.to_string();
-    if !ENABLED.load(Ordering::SeqCst) {
-        return UpdateInfo { enabled: false, current, ..Default::default() };
-    }
-    let updater = match app.updater() {
-        Ok(u) => u,
-        Err(e) => return UpdateInfo { enabled: true, current, error: Some(friendly(&e)), ..Default::default() },
-    };
-    match updater.check().await {
-        Ok(Some(u)) => {
-            let info = UpdateInfo {
-                enabled: true,
-                available: true,
-                current,
-                version: Some(u.version.clone()),
-                notes: u.body.clone(),
-                date: u.date.map(|d| d.to_string()),
-                error: None,
-            };
-            if let Ok(mut p) = PENDING.lock() {
-                *p = Some(u);
-            }
-            info
-        }
-        Ok(None) => UpdateInfo { enabled: true, available: false, current, ..Default::default() },
-        Err(e) => UpdateInfo { enabled: true, current, error: Some(friendly(&e)), ..Default::default() },
-    }
+#[derive(Serialize)]
+pub(crate) struct UpdateInfo {
+    version: String,
+    current: String,
+    notes: String,
 }
 
-/// Télécharge, vérifie la signature, installe, puis redémarre l'application.
-/// Sous Windows, l'installateur ferme lui-même l'application. Sous Fedora, le système demande
-/// le mot de passe administrateur (polkit) pour installer le paquet .rpm.
+/// Cherche une nouvelle version (canal stable ou bêta). Rien en mode développement.
 #[tauri::command]
-pub async fn install_update(app: AppHandle) -> Result<(), String> {
-    if INSTALLING.swap(true, Ordering::SeqCst) {
-        return Err("BUSY".into());
+pub(crate) async fn update_check(app: tauri::AppHandle, beta: bool) -> Result<Option<UpdateInfo>, String> {
+    if cfg!(debug_assertions) && std::env::var_os("SXM_TEST_UPDATES").is_none() {
+        return Ok(None);
     }
-    let update = PENDING.lock().ok().and_then(|mut p| p.take());
-    let Some(update) = update else {
-        INSTALLING.store(false, Ordering::SeqCst);
-        return Err("NO_UPDATE".into());
+    let found = match updater_for(&app, beta)?.check().await {
+        Ok(f) => f,
+        Err(e) if aucune_version_publiee(&e) => None,
+        Err(e) => return Err(format!("Vérification impossible : {e}")),
     };
-    let mut received: u64 = 0;
-    let app2 = app.clone();
-    let res = update
+    Ok(found.map(|u| UpdateInfo {
+        version: u.version.clone(),
+        current: u.current_version.clone(),
+        notes: u.body.clone().unwrap_or_default(),
+    }))
+}
+
+/// Télécharge, vérifie la signature et installe, puis redémarre. Windows : installateur silencieux ;
+/// macOS : remplacement de l'application ; Fedora : paquet .rpm installé après le mot de passe
+/// administrateur (polkit).
+#[tauri::command]
+pub(crate) async fn update_install(app: tauri::AppHandle, beta: bool, progress: tauri::ipc::Channel<(u64, u64)>) -> Result<(), String> {
+    let Some(update) = updater_for(&app, beta)?.check().await.map_err(|e| format!("Vérification impossible : {e}"))? else {
+        return Err("Aucune mise à jour disponible.".into());
+    };
+    let mut done: u64 = 0;
+    update
         .download_and_install(
-            move |chunk, total| {
-                received += chunk as u64;
-                if let Some(t) = total.filter(|t| *t > 0) {
-                    let _ = app2.emit("update-progress", (received * 100 / t).min(100));
-                }
+            |chunk, total| {
+                done += chunk as u64;
+                let _ = progress.send((done, total.unwrap_or(0)));
             },
             || {},
         )
-        .await;
-    INSTALLING.store(false, Ordering::SeqCst);
-    match res {
-        Ok(()) => {
-            // fermer proprement les opérations 7-Zip éventuelles, puis relancer la nouvelle version
-            crate::engine::cancel();
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.hide();
+        .await
+        .map_err(|e| {
+            let s = e.to_string();
+            if s.to_lowercase().contains("signature") {
+                "SIGNATURE".to_string()
+            } else {
+                format!("Installation impossible : {s}")
             }
-            app.restart();
-        }
-        Err(e) => Err(friendly(&e)),
-    }
+        })?;
+    crate::engine::cancel();
+    app.restart();
 }

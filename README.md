@@ -17,27 +17,16 @@ vérifiée** avec la clé publique intégrée à l'application : un fichier modi
 Windows : installation silencieuse puis redémarrage. macOS : remplacement de l'application. Fedora : installation
 du `.rpm` après saisie du mot de passe administrateur (polkit).
 
-Mise en place (une seule fois) : générer la paire de clés avec `npx tauri signer generate -w ~/.tauri/sxm-archive.key`,
-puis dans le dépôt GitHub (Settings → Secrets and variables → Actions) :
-- variable `TAURI_UPDATER_PUBKEY` : le contenu de `sxm-archive.key.pub` ;
-- secrets `TAURI_SIGNING_PRIVATE_KEY` (contenu de `sxm-archive.key`) et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
-**Conservez la clé privée en lieu sûr** : sans elle, plus aucune mise à jour ne pourra être publiée pour les
-installations existantes. Sans ces clés, l'application est compilée sans mises à jour et la publication est refusée.
+Clé de signature : la même que SXM PDF. Clé publique dans `src-tauri/tauri.conf.json` ; secret GitHub
+`TAURI_SIGNING_PRIVATE_KEY` (Settings → Secrets and variables → Actions) = contenu de la clé privée de SXM PDF.
+Sans ce secret, la publication est refusée.
 
 ## Compiler et publier
-Tout se fait sur GitHub Actions (`.github/workflows/build.yml`) :
-- **chaque Pull Request et chaque envoi sur `main`** : contrôles (format, Clippy, syntaxe JS), tests du moteur
-  sous Linux et Windows, compilation des installateurs, installation/désinstallation réelles sous
-  `windows-2022` et `windows-2025`. Les installateurs sont disponibles dans l'onglet **Actions** (artefacts) ;
-- **publication** : onglet **Actions → Compiler SXM Archive → Run workflow** sur `main`, case « publier » cochée
-  (ou tag `vX.Y.Z` égal à la version). La publication n'a lieu qu'après réussite de tous les tests et
-  **échoue si la version existe déjà** : aucune release ni aucun tag n'est jamais supprimé.
-
-Pour une nouvelle version : changer `version` dans `package.json`, `src-tauri/Cargo.toml` et
-`src-tauri/tauri.conf.json` (le workflow vérifie qu'elles sont identiques).
-
-En local : `npm ci`, placer `7z.exe`, `7z.dll` et `License.txt` (vérifiés avec `third_party/7zip.sha256`)
-dans `src-tauri/bin/`, puis `npx tauri build`. Tests : `cd src-tauri && cargo test`.
+Voir `CLAUDE.md` (fiche de reprise) : même organisation que SXM PDF.
+- Chaque PR et chaque envoi sur `main` : audit, tests Rust / JavaScript / interface, installateurs Windows,
+  Fedora 45 et macOS construits, installés et lancés (onglet **Actions**).
+- Publier : version dans `package.json`, `src-tauri/Cargo.toml` et `src-tauri/tauri.conf.json`, première section
+  de `CHANGELOG.md`, puis envoi sur la branche `publier`. La publication échoue si la version existe déjà.
 
 ## Sécurité
 - Aucun fichier existant n'est écrasé sans confirmation (compression : écriture dans un fichier temporaire puis

@@ -27,7 +27,6 @@ const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 /// Taille maximale conservée de la sortie d'un processus (pour les messages d'erreur).
 const TAIL_MAX: usize = 64 * 1024;
-const NO_PW: &str = "-pSXM_NO_PASSWORD";
 
 /// Extensions ouvertes uniquement après confirmation (exécutables, scripts, raccourcis…).
 pub const DANGEROUS_EXT: &[&str] = &[
@@ -225,18 +224,33 @@ impl Engine {
 
     /// Lance 7-Zip. stdout est traité ligne par ligne (`on_line`) ou pour la progression ;
     /// stderr est lu dans un fil séparé. Seule la fin des sorties est conservée.
-    fn run(&self, args: Vec<String>, progress: Option<Progress>, mut on_line: Option<&mut dyn FnMut(&str)>) -> EResult<Out> {
+    /// `stdin` : texte envoyé à 7-Zip sur son entrée standard (mot de passe). Le mot de passe n'apparaît
+    /// ainsi jamais dans la ligne de commande (visible par les autres programmes de la session) et peut
+    /// contenir n'importe quel caractère imprimable, guillemets compris.
+    fn run(
+        &self,
+        args: Vec<String>,
+        stdin: Option<String>,
+        progress: Option<Progress>,
+        mut on_line: Option<&mut dyn FnMut(&str)>,
+    ) -> EResult<Out> {
         if cancelled() {
             return Err(EngineError::new("CANCELLED", ""));
         }
         let mut child = self
             .cmd(&args, None)
-            .stdin(Stdio::null())
+            .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| EngineError::new("ENGINE_MISSING", format!("{} : {e}", self.seven.display())))?;
         let _t = Tracked::new(&child);
+        if let (Some(data), Some(mut sin)) = (stdin, child.stdin.take()) {
+            // écrit dans un fil séparé puis ferme l'entrée : 7-Zip ne peut jamais attendre une saisie
+            thread::spawn(move || {
+                let _ = sin.write_all(data.as_bytes());
+            });
+        }
         let err_t = read_tail_thread(child.stderr.take().unwrap());
         let mut stdout = child.stdout.take().unwrap();
         let mut tail = Tail::default();
@@ -414,21 +428,19 @@ pub fn is_tgz(f: &str) -> bool {
     l.ends_with(".tar.gz") || l.ends_with(".tgz")
 }
 
-/// Sous Windows, 7-Zip découpe lui-même sa ligne de commande et ne sait pas recevoir un guillemet
-/// dans un argument : un mot de passe contenant `"` serait mal transmis. On le refuse clairement.
+/// Mot de passe utilisable : tout caractère imprimable (guillemets compris), mais pas de retour à la
+/// ligne ni de caractère nul, qui couperaient la saisie envoyée à 7-Zip.
 pub fn check_password(password: Option<&str>) -> EResult<()> {
     match password {
-        Some(p) if p.contains('"') && cfg!(windows) => Err(EngineError::new("PASSWORD_CHARS", "\"")),
-        Some(p) if p.contains('\0') || p.contains('\n') || p.contains('\r') => Err(EngineError::new("PASSWORD_CHARS", "")),
+        Some(p) if p.chars().any(|c| c == '\0' || c == '\n' || c == '\r') => Err(EngineError::new("PASSWORD_CHARS", "")),
         _ => Ok(()),
     }
 }
 
-fn pw_arg(password: Option<&str>) -> String {
-    match password {
-        Some(p) if !p.is_empty() => format!("-p{p}"),
-        _ => NO_PW.into(),
-    }
+/// Saisie envoyée à 7-Zip pour une lecture (une seule demande). Sans mot de passe : aucune saisie,
+/// 7-Zip échoue aussitôt sur une archive chiffrée (« PASSWORD_REQUIRED »).
+fn pw_input(password: Option<&str>) -> Option<String> {
+    password.filter(|p| !p.is_empty()).map(|p| format!("{p}\n"))
 }
 
 /// Traduit la sortie de 7-Zip en erreur exploitable par l'interface.
@@ -443,6 +455,11 @@ pub fn classify(o: &Out, password_given: bool) -> EngineError {
         .collect::<Vec<_>>()
         .join("\n");
     let detail = if detail.is_empty() { format!("code {:?}", o.code) } else { detail };
+    // 7-Zip a demandé un mot de passe sur l'entrée standard et n'en a pas reçu (fin de saisie) :
+    // il s'interrompt (« Break signaled », code 255). L'annulation par l'utilisateur est traitée avant.
+    if l.contains("enter password") && (l.contains("break signaled") || o.code == Some(255)) {
+        return EngineError::new(if password_given { "PASSWORD_WRONG" } else { "PASSWORD_REQUIRED" }, detail);
+    }
     if l.contains("wrong password")
         || l.contains("open encrypted")
         || l.contains("data error in encrypted")
@@ -561,8 +578,9 @@ pub fn is_dangerous(name: &str) -> bool {
 
 static TMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+/// Dossier temporaire privé de l'utilisateur (voir files.rs : $XDG_RUNTIME_DIR sous Linux, 0700).
 pub fn tmp_root() -> PathBuf {
-    std::env::temp_dir().join("sxm-archive")
+    crate::files::app_temp_dir()
 }
 
 /// Dossier temporaire unique, supprimé automatiquement à la fin de sa portée.
@@ -675,16 +693,8 @@ impl Engine {
                 self.run_tgz(file, s(&["l", "-slt", "-ba", "-bsp0"]), None, Some(&mut cb))?
             } else {
                 self.run(
-                    vec![
-                        "l".into(),
-                        "-slt".into(),
-                        "-ba".into(),
-                        "-bsp0".into(),
-                        "-sccUTF-8".into(),
-                        pw_arg(password),
-                        "--".into(),
-                        file.into(),
-                    ],
+                    vec!["l".into(), "-slt".into(), "-ba".into(), "-bsp0".into(), "-sccUTF-8".into(), "--".into(), file.into()],
+                    pw_input(password),
                     None,
                     Some(&mut cb),
                 )?
@@ -740,11 +750,10 @@ impl Engine {
             a.extend(members.iter().cloned());
             self.run_tgz(file, a, progress, None)?
         } else {
-            a.push(pw_arg(password));
             a.push("--".into());
             a.push(file.into());
             a.extend(members.iter().cloned());
-            self.run(a, progress, None)?
+            self.run(a, pw_input(password), progress, None)?
         };
         warnings.extend(check(o, password.is_some())?);
         Ok(Done { ok: true, out: Some(dest.display().to_string()), warnings })
@@ -756,16 +765,8 @@ impl Engine {
             self.run_tgz(file, s(&["t", "-bsp1"]), progress, None)?
         } else {
             self.run(
-                vec![
-                    "t".into(),
-                    "-bsp1".into(),
-                    "-bb0".into(),
-                    "-y".into(),
-                    "-sccUTF-8".into(),
-                    pw_arg(password),
-                    "--".into(),
-                    file.into(),
-                ],
+                vec!["t".into(), "-bsp1".into(), "-bb0".into(), "-y".into(), "-sccUTF-8".into(), "--".into(), file.into()],
+                pw_input(password),
                 progress,
                 None,
             )?
@@ -854,7 +855,7 @@ impl Engine {
                     tar.display().to_string(),
                 ];
                 a.extend(files.iter().cloned());
-                let mut w = check(self.run(a, Some(&half), None)?, false)?;
+                let mut w = check(self.run(a, None, Some(&half), None)?, false)?;
                 let second = |v: u32| {
                     if let Some(p) = progress {
                         p(50 + v / 2)
@@ -871,7 +872,7 @@ impl Engine {
                     partial.display().to_string(),
                     tar.display().to_string(),
                 ];
-                w.extend(check(self.run(a, Some(&second), None)?, false)?);
+                w.extend(check(self.run(a, None, Some(&second), None)?, false)?);
                 w
             }
             "zip" | "7z" => {
@@ -884,8 +885,9 @@ impl Engine {
                     "-y".into(),
                     "-sccUTF-8".into(),
                 ];
-                if let Some(p) = pw {
-                    a.push(format!("-p{p}"));
+                let input = pw.map(|p| format!("{p}\n{p}\n"));
+                if pw.is_some() {
+                    a.push("-p".into()); // mot de passe demandé sur l'entrée standard (saisie + confirmation)
                     if format == "zip" {
                         a.push("-mem=AES256".into());
                     }
@@ -896,7 +898,7 @@ impl Engine {
                 a.push("--".into());
                 a.push(partial.display().to_string());
                 a.extend(files.iter().cloned());
-                check(self.run(a, progress, None)?, false)?
+                check(self.run(a, input, progress, None)?, false)?
             }
             other => return Err(EngineError::new("UNSUPPORTED", other)),
         };
@@ -991,11 +993,10 @@ impl Engine {
             a.push(member.into());
             self.run_tgz(file, a, None, None)?
         } else {
-            a.push(pw_arg(password));
             a.push("--".into());
             a.push(file.into());
             a.push(member.into());
-            self.run(a, None, None)?
+            self.run(a, pw_input(password), None, None)?
         };
         check(o, password.is_some())?;
         let target = td.path.join(member);
@@ -1096,6 +1097,10 @@ mod tests {
         assert_eq!(classify(&o("ERROR: Headers Error", 2), false).code, "CORRUPT");
         assert_eq!(classify(&o("", 8), false).code, "OUT_OF_MEMORY");
         assert_eq!(classify(&Out { code: None, out: String::new(), err: String::new() }, false).code, "CANCELLED");
+        assert_eq!(
+            classify(&Out { code: Some(255), out: "\nEnter password:".into(), err: "\n\nBreak signaled".into() }, false).code,
+            "PASSWORD_REQUIRED"
+        );
     }
 
     #[test]
@@ -1220,16 +1225,17 @@ mod tests {
         assert_eq!(e.list(z7.to_str().unwrap(), Some("faux")).unwrap_err().code, "PASSWORD_WRONG");
         assert!(!e.list(z7.to_str().unwrap(), Some("Mot de passe é & 'x' %PATH% ^!")).unwrap().entries.is_empty());
         e.test(z7.to_str().unwrap(), Some("Mot de passe é & 'x' %PATH% ^!"), None).unwrap();
-        // guillemet : refusé sous Windows (7-Zip ne peut pas le recevoir), accepté ailleurs
+        // guillemets et espaces : acceptés partout (mot de passe transmis par l'entrée standard)
         let q = w.path.join("guillemet.7z");
-        let r = e.compress(&inp, q.to_str().unwrap(), "7z", 5, Some("a\"b"), false, false, None);
-        if cfg!(windows) {
-            assert_eq!(r.unwrap_err().code, "PASSWORD_CHARS");
-            assert!(!q.exists());
-        } else {
-            r.unwrap();
-            e.test(q.to_str().unwrap(), Some("a\"b"), None).unwrap();
-        }
+        let pq = "Mot \"de\" passe ' & ^ % é";
+        e.compress(&inp, q.to_str().unwrap(), "7z", 5, Some(pq), true, false, None).unwrap();
+        e.test(q.to_str().unwrap(), Some(pq), None).unwrap();
+        assert_eq!(e.list(q.to_str().unwrap(), Some("Mot de passe")).unwrap_err().code, "PASSWORD_WRONG");
+        // retour à la ligne : refusé (couperait la saisie)
+        assert_eq!(
+            e.compress(&inp, w.path.join("nl.7z").to_str().unwrap(), "7z", 5, Some("a\nb"), false, false, None).unwrap_err().code,
+            "PASSWORD_CHARS"
+        );
         // ZIP AES : liste lisible, extraction protégée
         let zp = w.path.join("secret.zip");
         e.compress(&inp, zp.to_str().unwrap(), "zip", 5, Some("abc"), false, false, None).unwrap();

@@ -44,6 +44,10 @@ mises à jour signées (Windows, macOS, Fedora .rpm).
 - Mises à jour : même clé que SXM PDF. Clé publique dans `tauri.conf.json` ; secret GitHub
   `TAURI_SIGNING_PRIVATE_KEY` = contenu du fichier « SXM-PDF-cle-mises-a-jour.txt » d'Invisible_Dawn.
   Les sessions Claude ne peuvent ni lire ni écrire les secrets : c'est Invisible_Dawn qui l'ajoute.
+  **Le secret est facultatif** (choix d'Invisible_Dawn) : sans lui, la publication passe quand même, latest.json
+  ne contient que version + nouveautés, et l'appli propose « Télécharger » (ouvre la page de la version) au lieu
+  d'installer. Dès que le secret existe, l'installation signée redevient automatique, sans rien changer d'autre.
+  Ne pas redemander le secret à Invisible_Dawn.
 
 ## Historique
 - 1.x : version GTK3 pour MATE. 2.0 : Electron (bloqué par Windows). 2.1–2.3 : Tauri (voir CHANGELOG).

@@ -19,7 +19,8 @@ du `.rpm` après saisie du mot de passe administrateur (polkit).
 
 Clé de signature : la même que SXM PDF. Clé publique dans `src-tauri/tauri.conf.json` ; secret GitHub
 `TAURI_SIGNING_PRIVATE_KEY` (Settings → Secrets and variables → Actions) = contenu de la clé privée de SXM PDF.
-Sans ce secret, la publication est refusée.
+Ce secret est facultatif : sans lui, l'application signale les nouvelles versions et ouvre leur page de
+téléchargement (pas d'installation automatique).
 
 ## Compiler et publier
 Voir `CLAUDE.md` (fiche de reprise) : même organisation que SXM PDF.

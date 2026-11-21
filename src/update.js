@@ -2,6 +2,7 @@
 // droite, jamais d'installation sans clic. Téléchargement et vérification de la signature côté Rust.
 // Différence avec SXM PDF : sous Fedora, le paquet .rpm signé est installé par l'application
 // (mot de passe administrateur demandé par le système) ; en cas d'échec, la page de la version s'ouvre.
+// Version publiée sans fichier signé (u.manual) : « Télécharger » ouvre la page de la version.
 import { invoke, Channel } from "@tauri-apps/api/core";
 import * as db from "./store.js";
 import { toast, el, modal } from "./ui.js";
@@ -55,7 +56,7 @@ export function notify(u) {
       el("button", { class: "uc-x", title: "Plus tard", "aria-label": "Plus tard", onclick: close }, "×")),
     el("div", { class: "uc-sub" }, `Vous utilisez la version ${u.current}.`),
     el("div", { class: "uc-row" },
-      small("Installer", () => { close(); install(u); }, "btn accent"),
+      small(u.manual ? "Télécharger" : "Installer", () => { close(); install(u); }, "btn accent"),
       u.notes ? small("Nouveautés", () => { close(); offer(u, true); }) : null,
       small("Plus tard", close)),
     el("button", { class: "uc-skip", onclick: () => { db.set("sxm.updates.skip", u.version); close(); } }, "Ignorer cette version"));
@@ -66,7 +67,9 @@ export function notify(u) {
 function offer(u, automatic) {
   return modal((m, close) => m.append(
     el("h2", {}, `SXM Archive ${u.version} est disponible`),
-    el("p", {}, isLinux
+    el("p", {}, u.manual
+      ? `Vous utilisez la version ${u.current}. Téléchargez la nouvelle version, puis installez-la par-dessus : vos réglages sont conservés.`
+      : isLinux
       ? `Vous utilisez la version ${u.current}. La mise à jour est téléchargée, sa signature vérifiée, puis Fedora vous demande votre mot de passe pour l'installer.`
       : `Vous utilisez la version ${u.current}. La mise à jour est téléchargée, sa signature vérifiée, puis elle s'installe en un clic.`),
     u.notes ? el("div", {},
@@ -75,10 +78,16 @@ function offer(u, automatic) {
     el("div", { class: "row end" },
       automatic ? el("button", { class: "btn", onclick: () => { db.set("sxm.updates.skip", u.version); close(); } }, "Ignorer cette version") : null,
       el("button", { class: "btn", onclick: () => close() }, "Plus tard"),
-      el("button", { class: "btn accent", onclick: () => { close(); install(u); } }, "Installer maintenant"))));
+      el("button", { class: "btn accent", onclick: () => { close(); install(u); } }, u.manual ? "Télécharger" : "Installer maintenant"))));
 }
 
+const pageOf = (u) => (u.version ? `${RELEASES}/tag/v${u.version}` : `${RELEASES}/latest`);
+
 async function install(u) {
+  if (u.manual) {
+    toast("La page de téléchargement s'ouvre dans votre navigateur.");
+    return invoke("open_external", { url: pageOf(u) }).catch((e) => toast(String(e?.message || e), true));
+  }
   if (state.busy) return toast("Une opération est en cours : attendez sa fin ou annulez-la.", true);
   const bar = el("div", { style: "height:8px;border-radius:4px;background:var(--accent);width:0%;transition:width .2s" });
   const label = el("p", {}, "Téléchargement…");
@@ -105,7 +114,7 @@ async function install(u) {
     const msg = String(e?.message || e);
     if (msg === "SIGNATURE") return toast("La signature de la mise à jour est invalide : elle a été refusée par sécurité.", true);
     toast("La mise à jour a échoué : " + msg + `\nVous pouvez télécharger la nouvelle version sur ${RELEASES}`, true);
-    if (isLinux) invoke("open_external", { url: `${RELEASES}/tag/v${u.version}` }).catch(() => {});
+    if (isLinux) invoke("open_external", { url: pageOf(u) }).catch(() => {});
   }
 }
 

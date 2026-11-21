@@ -25,7 +25,7 @@ test("accueil : cartes, barre latérale, aucun bouton d'archive actif", async ()
   assert.equal(await page.$$eval(".home-card", (c) => c.length), 6);
   assert.ok(await page.$eval("body", (b) => b.classList.contains("at-home")));
   assert.ok(await page.$eval('.rib-panel [data-act="test"]', (b) => b.disabled));
-  assert.equal(await page.$eval("#app-version", (e) => e.textContent), "v3.0.0");
+  assert.equal(await page.$eval("#app-version", (e) => e.textContent), "v" + JSON.parse(fs.readFileSync(new URL("../../package.json", import.meta.url), "utf8")).version);
 });
 
 test("ouvrir une archive, naviguer, chercher, trier", async () => {

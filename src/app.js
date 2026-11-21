@@ -37,6 +37,7 @@ export async function about() {
   let i = { version: "", engine: "7-Zip 25.01", publisher: "Invisible_Dawn" };
   try { i = await api.appInfo(); } catch { /* aperçu hors application */ }
   modal((m, close) => m.append(
+    el("img", { src: "/banniere.jpg", alt: "", style: "width:100%;border-radius:12px;display:block" }),
     el("h2", {}, `SXM Archive ${i.version}`),
     el("p", {}, "Ouvrir, extraire, créer et protéger des archives RAR, ZIP, 7z et tar.gz."),
     el("p", {}, `© 2026 ${i.publisher}.`),

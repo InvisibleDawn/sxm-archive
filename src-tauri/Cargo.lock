@@ -3719,7 +3719,7 @@ dependencies = [
 
 [[package]]
 name = "sxm-archive"
-version = "3.0.0"
+version = "3.0.1"
 dependencies = [
  "getrandom 0.3.4",
  "serde",

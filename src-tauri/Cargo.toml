@@ -1,6 +1,6 @@
 [package]
 name = "sxm-archive"
-version = "3.0.0"
+version = "3.0.1"
 description = "SXM Archive - gestionnaire d'archives RAR, ZIP, 7z, tar.gz"
 authors = ["Invisible_Dawn"]
 edition = "2021"

@@ -1,7 +1,7 @@
 {
   "name": "sxm-archive",
   "private": true,
-  "version": "3.0.0",
+  "version": "3.0.1",
   "type": "module",
   "description": "SXM Archive — gestionnaire d'archives RAR, ZIP, 7z, tar.gz",
   "author": "Invisible_Dawn",

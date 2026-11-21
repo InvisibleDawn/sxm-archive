@@ -143,6 +143,20 @@ test("carte de mise à jour discrète, sans installation automatique", async () 
   await page.keyboard.press("Escape");
 });
 
+test("version publiée sans signature : « Télécharger » ouvre la page, rien n'est installé", async () => {
+  await page.evaluate(() => { window.__mock.update = { version: "3.1.0", current: "3.0.0", notes: "", manual: true }; });
+  await click('.top-actions [data-menu="more"]');
+  await click('#menu-more [data-act="updates"]');
+  await page.waitForTimeout(400);
+  assert.match(await page.$eval(".modal", (m) => m.textContent), /Téléchargez la nouvelle version/);
+  await page.click(".modal .btn.accent");
+  await page.waitForTimeout(300);
+  const urls = (await callsOf(page, "open_external")).map((c) => c.url);
+  assert.ok(urls.includes("https://github.com/InvisibleDawn/sxm-archive/releases/tag/v3.1.0"), urls.join(", "));
+  assert.equal((await callsOf(page, "update_install")).length, 0);
+  await page.evaluate(() => (window.__mock.update = null));
+});
+
 test("thème sombre et aucune erreur JavaScript", async () => {
   await click('[data-act="theme"]');
   assert.equal(await page.$eval("html", (h) => h.dataset.theme), "dark");

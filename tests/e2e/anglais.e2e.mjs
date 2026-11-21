@@ -43,6 +43,8 @@ await act('.home-card[data-act="protect"]', "protéger");
 await act('[data-act="about"]', "à propos");
 await page.evaluate(() => (window.__mock.update = { version: "3.1.0", current: "3.0.0", notes: "x" }));
 await page.click('[data-rib="tools"]'); await act('.rib-panel [data-act="updates"]', "mise à jour");
+await page.evaluate(() => (window.__mock.update = { version: "3.1.0", current: "3.0.0", notes: "", manual: true }));
+await act('.rib-panel [data-act="updates"]', "mise à jour (sans signature)");
 // archive ouverte
 await page.evaluate(() => window.__mock.picks.push("/d/Projet.7z"));
 await page.click('.home-card[data-act="open"]'); await page.waitForTimeout(400);

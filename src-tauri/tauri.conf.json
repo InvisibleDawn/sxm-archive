@@ -32,6 +32,7 @@
     "active": true,
     "targets": [
       "rpm",
+      "deb",
       "msi",
       "nsis",
       "dmg",
@@ -120,6 +121,23 @@
         },
         "desktopTemplate": "linux/sxm-archive.desktop",
         "postRemoveScript": "linux/postun.sh"
+      },
+      "deb": {
+        "depends": [
+          "xdg-utils",
+          "libstdc++6"
+        ],
+        "recommends": [
+          "caja-actions"
+        ],
+        "files": {
+          "/usr/share/file-manager/actions/sxm-archive-compress.desktop": "linux/caja-compress.desktop",
+          "/usr/share/nemo/actions/sxm-archive-compress.nemo_action": "linux/nemo-compress.nemo_action",
+          "/usr/share/doc/sxm-archive/7-Zip-License.txt": "bin/License.txt",
+          "/usr/share/doc/sxm-archive/THIRD-PARTY-NOTICES.md": "../THIRD-PARTY-NOTICES.md"
+        },
+        "desktopTemplate": "linux/sxm-archive.desktop",
+        "postRemoveScript": "linux/postrm-deb.sh"
       }
     },
     "windows": {

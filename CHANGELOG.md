@@ -1,5 +1,9 @@
 # Journal des modifications — SXM Archive
 
+## 3.0.1 — 20/11/2026
+- Nouveau logo et nouvelle icône SXM Archive (Windows, Fedora, macOS), bannière dans « À propos ».
+- Les mises à jour peuvent être publiées sans clé de signature : l'application les signale et ouvre la page de téléchargement.
+
 ## 3.0.0 — 20/11/2026
 Refonte complète sur le modèle de SXM PDF.
 - Nouvelle interface de la famille SXM : barre latérale à libellés, accueil illustré, ruban simplifié, thème clair / sombre, info-bulles.

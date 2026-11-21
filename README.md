@@ -1,5 +1,7 @@
 # SXM Archive
 
+![SXM Archive](docs/banniere.jpg)
+
 Gestionnaire d'archives pour Windows 10/11, Fedora et macOS 11+ : **RAR** (extraction), **ZIP**, **7z** et **tar.gz** (extraction et création), chiffrement **AES-256**, conversion entre formats, test d'intégrité. Moteur 7-Zip 25.01 intégré, 100 % hors ligne.
 
 ## Installer

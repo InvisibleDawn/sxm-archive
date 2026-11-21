@@ -141,7 +141,7 @@ svg.lucide { width: 18px; height: 18px; stroke-width: 1.8; flex: none; }
 /* ---------- Barre latérale ---------- */
 #rail { width: 232px; flex: none; align-items: stretch; gap: 4px; padding: 16px 12px 12px; background: var(--rail); overflow-y: auto; scrollbar-width: none; }
 .side-brand { display: flex; align-items: center; gap: 11px; padding: 2px 6px 16px; }
-.side-brand img { width: 40px; height: 40px; border-radius: 11px; box-shadow: 0 4px 12px rgba(24,103,216,.28); }
+.side-brand img { width: 44px; height: 44px; filter: drop-shadow(0 3px 6px rgba(24,103,216,.3)); }
 .side-brand b { display: block; font-size: 16px; font-weight: 800; letter-spacing: -.2px; color: var(--accent); }
 .side-brand span { font-size: 11.5px; color: var(--muted); }
 #rail .rail-btn, #rail .rail-btn.small { width: 100%; height: 42px; display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 0 14px;
@@ -179,7 +179,7 @@ body.at-home #rail .rail-btn[data-act="home"] svg.lucide { color: #fff; }
 .hero { position: relative; flex: none; display: flex; align-items: center; gap: 18px; min-height: 172px; padding: 22px 30px; overflow: hidden; border-bottom: 1px solid var(--border); }
 .hero-art { position: absolute; inset: 0 0 0 30%; background: url("/illustrations/baie.svg") right center / cover no-repeat;
   -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 42%); mask-image: linear-gradient(90deg, transparent 0, #000 42%); }
-.hero-logo { position: relative; z-index: 1; width: 78px; height: 78px; border-radius: 20px; box-shadow: 0 10px 26px rgba(24,103,216,.3); }
+.hero-logo { position: relative; z-index: 1; width: 96px; height: 96px; filter: drop-shadow(0 8px 16px rgba(24,103,216,.3)); }
 .hero-text { position: relative; z-index: 1; }
 #empty .hero h1 { margin: 0; font-size: 38px; line-height: 1.1; font-weight: 800; letter-spacing: -.8px; color: var(--accent); background: none; -webkit-text-fill-color: currentColor; }
 #empty .hero p { margin: 8px 0 0; font-size: 14.5px; line-height: 1.5; color: var(--text); opacity: .8; }

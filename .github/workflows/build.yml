@@ -1,7 +1,7 @@
 # Compile SXM Archive sur les serveurs de GitHub (même organisation que SXM PDF).
 #
 # - Pull Request et envoi sur main : audit, tests (Rust, JavaScript, interface), installateurs Windows,
-#   Fedora 45 et macOS construits, installés et lancés. Rien n'est publié.
+#   Fedora 45, Debian 13 et macOS construits, installés et lancés. Rien n'est publié.
 # - Publication : envoi sur la branche « publier » (git push -f origin HEAD:publier) ou tag vX.Y.Z.
 #   La version est celle de package.json ; vX.Y.Z-beta.N = version de test (canal bêta).
 #   La publication n'a lieu qu'après la réussite de TOUS les jobs, et elle échoue si la version existe
@@ -251,6 +251,67 @@ jobs:
             src-tauri/target/release/bundle/rpm/*.rpm
             src-tauri/target/release/bundle/rpm/*.rpm.sig
 
+  # 3 bis) Debian 13 (base de SXM Linux) : paquet .deb construit SUR Debian, installé avec apt, lancé, désinstallé
+  debian:
+    needs: [audit, controles]
+    runs-on: ubuntu-latest
+    container: debian:13
+    timeout-minutes: 60
+    steps:
+      - name: Dépendances Debian
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git ca-certificates build-essential curl file xz-utils pkg-config libssl-dev \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev \
+            nodejs npm xvfb dbus-x11 gh
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: 7-Zip 25.01 Linux (vérification SHA-256)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release download "$SEVENZIP_TAG" --repo ip7z/7zip --pattern "7z2501-linux-x64.tar.xz" --dir /tmp
+          (cd /tmp && grep ' 7z2501-linux-x64.tar.xz$' "$GITHUB_WORKSPACE/third_party/7zip.sha256" | sha256sum -c -)
+          mkdir -p src-tauri/bin && tar xJf /tmp/7z2501-linux-x64.tar.xz -C src-tauri/bin 7zz License.txt
+      - run: npm ci
+      - name: Préparer la compilation
+        env:
+          HAS_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
+        run: node scripts/prepare-build.mjs
+      - name: Paquet .deb
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --bundles deb -- --locked
+      - name: Installation, lancement et désinstallation sur Debian 13
+        run: |
+          set -eux
+          DEBIAN_FRONTEND=noninteractive apt-get install -y ./src-tauri/target/release/bundle/deb/*.deb
+          dpkg -s sxm-archive
+          Z="/usr/lib/SXM Archive/bin/7zz"
+          grep -q "Exec=sxm-archive %F" "/usr/share/applications/SXM Archive.desktop"
+          test -f /usr/share/file-manager/actions/sxm-archive-compress.desktop
+          test -f /usr/share/doc/sxm-archive/7-Zip-License.txt
+          mkdir -p "/tmp/src/Dossier é" && echo SXM > "/tmp/src/Dossier é/fichier.txt"
+          printf 'Mot "de" passe\nMot "de" passe\n' | "$Z" a /tmp/t.7z "/tmp/src/Dossier é" -p -mhe=on >/dev/null
+          printf 'Mot "de" passe\n' | "$Z" t /tmp/t.7z >/dev/null
+          Xvfb :99 -screen 0 1280x800x24 & sleep 2
+          export DISPLAY=:99
+          dbus-launch sxm-archive /tmp/t.7z > app.log 2>&1 & PID=$!
+          sleep 15
+          cat app.log || true
+          kill -0 $PID   # l'application tourne toujours après 15 s
+          kill $PID
+          apt-get remove -y sxm-archive
+          if [ -e /usr/bin/sxm-archive ] || [ -e "/usr/lib/SXM Archive" ]; then echo "fichiers restants"; exit 1; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sxm-archive-debian
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/*.deb.sig
+
   # 4) macOS : application universelle (Intel + Apple Silicon). macos-15-intel : les Mac Apple Silicon
   #    de GitHub sont souvent indisponibles (même choix que SXM PDF).
   macos:
@@ -319,7 +380,7 @@ jobs:
 
   # 5) Publication — seulement branche « publier » ou tag, après réussite de tout ce qui précède
   publier:
-    needs: [windows, fedora, macos]
+    needs: [windows, fedora, debian, macos]
     if: github.ref == 'refs/heads/publier' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -357,7 +418,7 @@ jobs:
           node ../scripts/latest-json.mjs . "$TAG" "$GITHUB_REPOSITORY" ../notes.txt
           sha256sum $(ls | grep -v -e '\.sig$' -e '^latest\.json$') > SHA256SUMS.txt
           cp ../notes.txt ../notes-page.txt
-          printf '\n---\nWindows : SmartScreen > Informations complémentaires > Exécuter quand même.\nMac : clic droit > Ouvrir au premier lancement ; si « endommagé » : xattr -cr "/Applications/SXM Archive.app".\nFedora : sudo dnf install ./SXM-Archive-*.rpm\nVérification : sha256sum -c SHA256SUMS.txt\n' >> ../notes-page.txt
+          printf '\n---\nWindows : SmartScreen > Informations complémentaires > Exécuter quand même.\nMac : clic droit > Ouvrir au premier lancement ; si « endommagé » : xattr -cr "/Applications/SXM Archive.app".\nFedora : sudo dnf install ./SXM-Archive-*.rpm\nDebian / Ubuntu / SXM Linux : sudo apt install ./SXM-Archive_*_amd64.deb\nVérification : sha256sum -c SHA256SUMS.txt\n' >> ../notes-page.txt
           gh release create "$TAG" * --repo "$GITHUB_REPOSITORY" $CIBLE $PRE --title "SXM Archive $VERSION" --notes-file ../notes-page.txt
           # Canal bêta (fichier technique) : toujours la dernière version publiée, test ou stable
           cp latest.json beta.json

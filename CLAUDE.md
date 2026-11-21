@@ -35,8 +35,10 @@ mises à jour signées (Windows, macOS, Fedora .rpm).
 
 ## Compilation et publication
 - Fedora : `npm install && npx tauri build --bundles rpm`.
+- Debian 13 / SXM Linux : `npx tauri build --bundles deb` (paquet `SXM-Archive_X.Y.Z_amd64.deb` sur la page Releases,
+  entrée `linux-x86_64-deb` dans latest.json ; désinstallation : `linux/postrm-deb.sh`).
 - GitHub Actions « Compiler SXM Archive » : à chaque PR / envoi sur main, audit + tests + installateurs
-  Windows, Fedora 45 (conteneur) et macOS (macos-15-intel, universel), chacun installé et lancé.
+  Windows, Fedora 45 (conteneur), Debian 13 (conteneur) et macOS (macos-15-intel, universel), chacun installé et lancé.
 - Publier : mettre la version dans `package.json`, `tauri.conf.json`, `Cargo.toml`, écrire la 1re section du
   CHANGELOG, puis `git push -f origin HEAD:publier` (le proxy des sessions Claude refuse la création de tags).
   `vX.Y.Z-beta.N` = version de test (canal bêta, sans .msi). La publication **échoue si la version existe

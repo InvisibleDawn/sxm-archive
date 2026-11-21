@@ -29,7 +29,9 @@ const mac = entry(pick(/\.app\.tar\.gz$/i));
 if (mac) for (const a of ["darwin-x86_64", "darwin-aarch64"]) { platforms[a] = mac; platforms[`${a}-app`] = mac; }
 const rpm = entry(pick(/\.rpm$/i));
 if (rpm) platforms["linux-x86_64-rpm"] = rpm;
-if (signed) for (const need of ["windows-x86_64", "darwin-aarch64", "linux-x86_64-rpm"]) {
+const deb = entry(pick(/\.deb$/i));
+if (deb) platforms["linux-x86_64-deb"] = deb;
+if (signed) for (const need of ["windows-x86_64", "darwin-aarch64", "linux-x86_64-rpm", "linux-x86_64-deb"]) {
   if (!platforms[need]) throw new Error(`plate-forme absente du manifeste : ${need}`);
 }
 const notes = notesFile && fs.existsSync(notesFile) ? fs.readFileSync(notesFile, "utf8").trim() : `SXM Archive ${version}`;
